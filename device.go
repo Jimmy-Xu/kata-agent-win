@@ -12,12 +12,10 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	pb "github.com/kata-containers/agent/protocols/grpc"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -237,15 +235,19 @@ func updateSpecDeviceList(device pb.Device, spec *pb.Spec) error {
 			"No devices found from the spec, cannot update")
 	}
 
-	stat := syscall.Stat_t{}
-	if err := syscall.Stat(device.VmPath, &stat); err != nil {
-		return err
-	}
+	//stat := syscall.Stat_t{}
+	//if err := syscall.Stat(device.VmPath, &stat); err != nil {
+	//	return err
+	//}
+	//
+	//dev := stat.Rdev
+	//
+	//major := int64(unix.Major(dev))
+	//minor := int64(unix.Minor(dev))
 
-	dev := stat.Rdev
+	major := int64(0)
+	minor := int64(0)
 
-	major := int64(unix.Major(dev))
-	minor := int64(unix.Minor(dev))
 
 	agentLog.WithFields(logrus.Fields{
 		"device-path":  device.VmPath,

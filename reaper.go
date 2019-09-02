@@ -14,9 +14,8 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/opencontainers/runc/libcontainer"
+	//"github.com/opencontainers/runc/libcontainer"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -46,13 +45,13 @@ type agentReaper struct {
 	epoller       map[int]*epoller
 }
 
-func exitStatus(status unix.WaitStatus) int {
-	if status.Signaled() {
-		return exitSignalOffset + int(status.Signal())
-	}
-
-	return status.ExitStatus()
-}
+//func exitStatus(status unix.WaitStatus) int {
+//	if status.Signaled() {
+//		return exitSignalOffset + int(status.Signal())
+//	}
+//
+//	return status.ExitStatus()
+//}
 
 func (r *agentReaper) init() {
 	r.exitCodeChans = make(map[int]chan<- int)
@@ -121,8 +120,8 @@ func (r *agentReaper) deleteExitCodeCh(pid int) {
 
 func (r *agentReaper) reap() error {
 	var (
-		ws  unix.WaitStatus
-		rus unix.Rusage
+		//ws  unix.WaitStatus
+		//rus unix.Rusage
 	)
 
 	// When running new processes, agent expects to wait
@@ -134,51 +133,51 @@ func (r *agentReaper) reap() error {
 	defer r.Unlock()
 
 	for {
-		pid, err := unix.Wait4(-1, &ws, unix.WNOHANG, &rus)
-		if err != nil {
-			if err == unix.ECHILD {
-				return nil
-			}
-
-			return err
-		}
-		if pid < 1 {
-			return nil
-		}
-
-		status := exitStatus(ws)
+		//pid, err := unix.Wait4(-1, &ws, unix.WNOHANG, &rus)
+		//if err != nil {
+		//	if err == unix.ECHILD {
+		//		return nil
+		//	}
+		//
+		//	return err
+		//}
+		//if pid < 1 {
+		//	return nil
+		//}
+		//
+		//status := exitStatus(ws)
 
 		agentLog.WithFields(logrus.Fields{
-			"pid":    pid,
-			"status": status,
+			//"pid":    pid,
+			//"status": status,
 		}).Debug("process exited")
 
-		exitCodeCh, err := r.getExitCodeCh(pid)
-		if err != nil {
-			// No need to signal a process with no channel
-			// associated. When a process has not been registered,
-			// this means the spawner does not expect to get the
-			// exit code from this process.
-			continue
-		}
+		//exitCodeCh, err := r.getExitCodeCh(pid)
+		//if err != nil {
+		//	// No need to signal a process with no channel
+		//	// associated. When a process has not been registered,
+		//	// this means the spawner does not expect to get the
+		//	// exit code from this process.
+		//	continue
+		//}
 
 		// Let's delete the entry here since the channel has been
 		// stored by the caller, in order to wait for the exit code.
-		r.deleteExitCodeCh(pid)
+		//r.deleteExitCodeCh(pid)
 
 		// Here, we have to signal the routine listening on
 		// this channel so that it can complete the cleanup
 		// of the process and return the exit code to the
 		// caller of WaitProcess().
-		exitCodeCh <- status
+		//exitCodeCh <- status
 
-		epoller, err := r.getEpoller(pid)
-		if err == nil {
-			//close the socket file to notify readStdio to close terminal specifically
-			//in case this process's terminal has been inherited by its children.
-			epoller.sockW.Close()
-		}
-		r.deleteEpoller(pid)
+		//epoller, err := r.getEpoller(pid)
+		//if err == nil {
+		//	//close the socket file to notify readStdio to close terminal specifically
+		//	//in case this process's terminal has been inherited by its children.
+		//	epoller.sockW.Close()
+		//}
+		//r.deleteEpoller(pid)
 	}
 }
 
@@ -261,8 +260,8 @@ func (p *reaperOSProcess) wait() {
 	(*os.Process)(p).Wait()
 }
 
-type reaperLibcontainerProcess libcontainer.Process
+//type reaperLibcontainerProcess libcontainer.Process
 
-func (p *reaperLibcontainerProcess) wait() {
-	(*libcontainer.Process)(p).Wait()
-}
+//func (p *reaperLibcontainerProcess) wait() {
+//	(*libcontainer.Process)(p).Wait()
+//}

@@ -7,13 +7,10 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
-
-	"golang.org/x/sys/unix"
 )
 
 var persistentNsDir = "/var/run/sandbox-ns"
@@ -35,13 +32,14 @@ const (
 )
 
 var cloneFlagsTable = map[nsType]int{
-	nsTypeIPC: unix.CLONE_NEWIPC,
-	nsTypeNet: unix.CLONE_NEWNET,
-	nsTypeUTS: unix.CLONE_NEWUTS,
+	//nsTypeIPC: unix.CLONE_NEWIPC,
+	//nsTypeNet: unix.CLONE_NEWNET,
+	//nsTypeUTS: unix.CLONE_NEWUTS,
 }
 
 func getCurrentThreadNSPath(nType nsType) string {
-	return fmt.Sprintf("/proc/%d/task/%d/ns/%s", os.Getpid(), unix.Gettid(), nType)
+	//return fmt.Sprintf("/proc/%d/task/%d/ns/%s", os.Getpid(), unix.Gettid(), nType)
+	return ""
 }
 
 // setupPersistentNs creates persistent namespace without switchin to it.
@@ -77,29 +75,29 @@ func setupPersistentNs(namespaceType nsType) (*namespace, error) {
 		}
 		defer origNsFd.Close()
 
-		// Create a new netns on the current thread.
-		err = unix.Unshare(cloneFlagsTable[namespaceType])
-		if err != nil {
-			return
-		}
-
-		// Bind mount the new namespace from the current thread onto the mount point to persist it.
-		err = unix.Mount(getCurrentThreadNSPath(namespaceType), nsPath, "none", unix.MS_BIND, "")
-		if err != nil {
-			return
-		}
-
-		// Switch back to original namespace.
-		if err = unix.Setns(int(origNsFd.Fd()), cloneFlagsTable[namespaceType]); err != nil {
-			return
-		}
+		//// Create a new netns on the current thread.
+		//err = unix.Unshare(cloneFlagsTable[namespaceType])
+		//if err != nil {
+		//	return
+		//}
+		//
+		//// Bind mount the new namespace from the current thread onto the mount point to persist it.
+		//err = unix.Mount(getCurrentThreadNSPath(namespaceType), nsPath, "none", unix.MS_BIND, "")
+		//if err != nil {
+		//	return
+		//}
+		//
+		//// Switch back to original namespace.
+		//if err = unix.Setns(int(origNsFd.Fd()), cloneFlagsTable[namespaceType]); err != nil {
+		//	return
+		//}
 
 	})()
 	wg.Wait()
 
 	if err != nil {
-		unix.Unmount(nsPath, unix.MNT_DETACH)
-		return nil, fmt.Errorf("failed to create namespace: %v", err)
+		//unix.Unmount(nsPath, unix.MNT_DETACH)
+		//return nil, fmt.Errorf("failed to create namespace: %v", err)
 	}
 
 	return &namespace{path: nsPath}, nil

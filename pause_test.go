@@ -21,11 +21,11 @@ func TestForkPauseBin(t *testing.T) {
 
 	cmd := &exec.Cmd{
 		Path: selfBinPath,
-		Args: []string{os.Args[0], pauseBinArg},
+		//Args: []string{os.Args[0], pauseBinArg},
 	}
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWPID,
+		//Cloneflags: syscall.CLONE_NEWPID,
 	}
 
 	err := cmd.Start()

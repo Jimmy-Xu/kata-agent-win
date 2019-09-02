@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
+	//"github.com/mdlayher/vsock"
 	"io/ioutil"
 	"net"
 	"os"
@@ -17,8 +18,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/mdlayher/vsock"
-	"golang.org/x/sys/unix"
+	//"github.com/mdlayher/vsock"
+	//"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -50,7 +51,7 @@ func newChannel(ctx context.Context) (channel, error) {
 	defer span.Finish()
 
 	var serialErr error
-	var vsockErr error
+	//var vsockErr error
 	var ch channel
 
 	for i := 0; i < channelExistMaxTries; i++ {
@@ -60,16 +61,16 @@ func newChannel(ctx context.Context) (channel, error) {
 				return ch, nil
 			}
 		case vsockCh:
-			if ch, vsockErr = checkForVsockChannel(ctx); vsockErr == nil && ch.(*vSockChannel) != nil {
-				return ch, nil
-			}
+			//if ch, vsockErr = checkForVsockChannel(ctx); vsockErr == nil && ch.(*vSockChannel) != nil {
+			//	return ch, nil
+			//}
 
 		case unknownCh:
 			// If we have not been explicitly passed if vsock is used or not, maybe due to
 			// an older runtime, try to check for vsock support.
-			if ch, vsockErr = checkForVsockChannel(ctx); vsockErr == nil && ch.(*vSockChannel) != nil {
-				return ch, nil
-			}
+			//if ch, vsockErr = checkForVsockChannel(ctx); vsockErr == nil && ch.(*vSockChannel) != nil {
+			//	return ch, nil
+			//}
 			if ch, serialErr = checkForSerialChannel(ctx); serialErr == nil && ch.(*serialChannel) != nil {
 				return ch, nil
 			}
@@ -82,9 +83,9 @@ func newChannel(ctx context.Context) (channel, error) {
 		agentLog.WithError(serialErr).Error("Serial port not found")
 	}
 
-	if vsockErr != nil {
-		agentLog.WithError(vsockErr).Error("VSock not found")
-	}
+	//if vsockErr != nil {
+	//	agentLog.WithError(vsockErr).Error("VSock not found")
+	//}
 
 	return nil, fmt.Errorf("Neither vsocks nor serial ports were found")
 }
@@ -136,12 +137,13 @@ func (c *vSockChannel) wait() error {
 }
 
 func (c *vSockChannel) listen() (net.Listener, error) {
-	l, err := vsock.Listen(vSockPort)
-	if err != nil {
-		return nil, err
-	}
+	//l, err := vsock.Listen(vSockPort)
+	//if err != nil {
+	//	return nil, err
+	//}
 
-	return l, nil
+	//return l, nil
+	return nil,nil
 }
 
 func (c *vSockChannel) teardown() error {
@@ -167,54 +169,56 @@ func (c *serialChannel) setup() error {
 }
 
 func (c *serialChannel) wait() error {
-	var event unix.EpollEvent
-	var events [1]unix.EpollEvent
-
-	fd := c.serialConn.Fd()
-	if fd == 0 {
-		return fmt.Errorf("serial port IO closed")
-	}
-
-	epfd, err := unix.EpollCreate1(unix.EPOLL_CLOEXEC)
-	if err != nil {
-		return err
-	}
-	defer unix.Close(epfd)
-
-	// EPOLLOUT: Writable when there is a connection
-	// EPOLLET: Edge trigger as EPOLLHUP is always on when there is no connection
-	// 0xffffffff: EPOLLET is negative and cannot fit in uint32 in golang
-	event.Events = unix.EPOLLOUT | unix.EPOLLET&0xffffffff
-	event.Fd = int32(fd)
-	if err = unix.EpollCtl(epfd, unix.EPOLL_CTL_ADD, int(fd), &event); err != nil {
-		return err
-	}
-	defer unix.EpollCtl(epfd, unix.EPOLL_CTL_DEL, int(fd), nil)
-
-	for {
-		nev, err := unix.EpollWait(epfd, events[:], -1)
-		if err != nil {
-			return err
-		}
-
-		for i := 0; i < nev; i++ {
-			ev := events[i]
-			if ev.Fd == int32(fd) {
-				agentLog.WithField("events", ev.Events).Debug("New serial channel event")
-				if ev.Events&unix.EPOLLOUT != 0 {
-					return nil
-				}
-				if ev.Events&unix.EPOLLERR != 0 {
-					return fmt.Errorf("serial port IO failure")
-				}
-				if ev.Events&unix.EPOLLHUP != 0 {
-					continue
-				}
-			}
-		}
-	}
+	//var event unix.EpollEvent
+	//var events [1]unix.EpollEvent
+	//
+	//fd := c.serialConn.Fd()
+	//if fd == 0 {
+	//	return fmt.Errorf("serial port IO closed")
+	//}
+	//
+	//epfd, err := unix.EpollCreate1(unix.EPOLL_CLOEXEC)
+	//if err != nil {
+	//	return err
+	//}
+	//defer unix.Close(epfd)
+	//
+	//// EPOLLOUT: Writable when there is a connection
+	//// EPOLLET: Edge trigger as EPOLLHUP is always on when there is no connection
+	//// 0xffffffff: EPOLLET is negative and cannot fit in uint32 in golang
+	//event.Events = unix.EPOLLOUT | unix.EPOLLET&0xffffffff
+	//event.Fd = int32(fd)
+	//if err = unix.EpollCtl(epfd, unix.EPOLL_CTL_ADD, int(fd), &event); err != nil {
+	//	return err
+	//}
+	//defer unix.EpollCtl(epfd, unix.EPOLL_CTL_DEL, int(fd), nil)
+	//
+	//for {
+	//	nev, err := unix.EpollWait(epfd, events[:], -1)
+	//	if err != nil {
+	//		return err
+	//	}
+	//
+	//	for i := 0; i < nev; i++ {
+	//		ev := events[i]
+	//		if ev.Fd == int32(fd) {
+	//			agentLog.WithField("events", ev.Events).Debug("New serial channel event")
+	//			if ev.Events&unix.EPOLLOUT != 0 {
+	//				return nil
+	//			}
+	//			if ev.Events&unix.EPOLLERR != 0 {
+	//				return fmt.Errorf("serial port IO failure")
+	//			}
+	//			if ev.Events&unix.EPOLLHUP != 0 {
+	//				continue
+	//			}
+	//		}
+	//	}
+	//}
 
 	// Never reach here
+
+	return nil
 }
 
 // yamuxWriter is a type responsible for logging yamux messages to the agent

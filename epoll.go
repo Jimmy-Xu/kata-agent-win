@@ -8,7 +8,6 @@ package main
 import (
 	"os"
 
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -29,10 +28,10 @@ type epoller struct {
 }
 
 func newEpoller() (*epoller, error) {
-	epollerFd, err := unix.EpollCreate1(unix.EPOLL_CLOEXEC)
-	if err != nil {
-		return nil, err
-	}
+	//epollerFd, err := unix.EpollCreate1(unix.EPOLL_CLOEXEC)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	rSock, wSock, err := os.Pipe()
 	if err != nil {
@@ -40,7 +39,7 @@ func newEpoller() (*epoller, error) {
 	}
 
 	ep := &epoller{
-		fd:      epollerFd,
+		//fd:      epollerFd,
 		sockW:   wSock,
 		sockR:   rSock,
 		sockMap: make(map[int32]*os.File),
@@ -58,12 +57,13 @@ func (ep *epoller) add(f *os.File) error {
 	// one end of its exit notify pipe. Those files will be registered with level-triggered
 	// notification.
 
-	event := unix.EpollEvent{
-		Fd:     int32(f.Fd()),
-		Events: unix.EPOLLHUP | unix.EPOLLIN | unix.EPOLLERR | unix.EPOLLRDHUP,
-	}
-	ep.sockMap[int32(f.Fd())] = f
-	return unix.EpollCtl(ep.fd, unix.EPOLL_CTL_ADD, int(f.Fd()), &event)
+	//event := unix.EpollEvent{
+	//	Fd:     int32(f.Fd()),
+	//	Events: unix.EPOLLHUP | unix.EPOLLIN | unix.EPOLLERR | unix.EPOLLRDHUP,
+	//}
+	//ep.sockMap[int32(f.Fd())] = f
+	//return unix.EpollCtl(ep.fd, unix.EPOLL_CTL_ADD, int(f.Fd()), &event)
+	return nil
 }
 
 // There will be three cases on the epoller once it run:
@@ -78,31 +78,31 @@ func (ep *epoller) add(f *os.File) error {
 // end the io.
 func (ep *epoller) run() (*os.File, error) {
 	fd := int32(ep.sockR.Fd())
-	events := make([]unix.EpollEvent, maxEvents)
-	for {
-		n, err := unix.EpollWait(ep.fd, events, -1)
-		if err != nil {
-			// EINTR: The call was interrupted by a signal handler before either
-			// any of the requested events occurred or the timeout expired
-			if err == unix.EINTR {
-				continue
-			}
-			return nil, err
-		}
-
-		for i := 0; i < n; i++ {
-			ev := &events[i]
-			// fd has been assigned with one end of process's exited pipe by default, and
-			// here to check is there any event occur on process's terminal, if "yes", it
-			// should be dealt first, otherwise, it means the process has exited and there
-			// is nothing left in the process's terminal needed to be read.
-			if ev.Fd != fd {
-				fd = ev.Fd
-				break
-			}
-		}
-		break
-	}
+	//events := make([]unix.EpollEvent, maxEvents)
+	//for {
+	//	n, err := unix.EpollWait(ep.fd, events, -1)
+	//	if err != nil {
+	//		// EINTR: The call was interrupted by a signal handler before either
+	//		// any of the requested events occurred or the timeout expired
+	//		if err == unix.EINTR {
+	//			continue
+	//		}
+	//		return nil, err
+	//	}
+	//
+	//	for i := 0; i < n; i++ {
+	//		ev := &events[i]
+	//		// fd has been assigned with one end of process's exited pipe by default, and
+	//		// here to check is there any event occur on process's terminal, if "yes", it
+	//		// should be dealt first, otherwise, it means the process has exited and there
+	//		// is nothing left in the process's terminal needed to be read.
+	//		if ev.Fd != fd {
+	//			fd = ev.Fd
+	//			break
+	//		}
+	//	}
+	//	break
+	//}
 
 	mf, exist := ep.sockMap[fd]
 	if !exist {

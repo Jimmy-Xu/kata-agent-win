@@ -82,7 +82,7 @@ endif
 ifdef STATIC
 	LDFLAGS := -extldflags '-static'
 else
-	BUILDFLAGS := -buildmode=pie
+	#BUILDFLAGS := -buildmode=pie
 endif
 
 # args for building agent image

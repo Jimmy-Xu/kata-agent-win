@@ -11,7 +11,7 @@ import (
 	"io"
 	"strings"
 
-	"golang.org/x/sys/unix"
+	//"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -34,38 +34,41 @@ type ReaderCloser struct {
 
 // NewReaderCloser returns an io.ReadCloser handle for uevent.
 func NewReaderCloser() (io.ReadCloser, error) {
-	nl := unix.SockaddrNetlink{
-		Family: unix.AF_NETLINK,
-		// Passing Pid as 0 here allows the kernel to take care of assigning
-		// it. This allows multiple netlink sockets to be used.
-		Pid:    uint32(0),
-		Groups: 1,
-	}
-
-	fd, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_KOBJECT_UEVENT)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := unix.Bind(fd, &nl); err != nil {
-		return nil, err
-	}
-
-	return &ReaderCloser{fd}, nil
+	//nl := unix.SockaddrNetlink{
+	//	Family: unix.AF_NETLINK,
+	//	// Passing Pid as 0 here allows the kernel to take care of assigning
+	//	// it. This allows multiple netlink sockets to be used.
+	//	Pid:    uint32(0),
+	//	Groups: 1,
+	//}
+	//
+	//fd, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_KOBJECT_UEVENT)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//if err := unix.Bind(fd, &nl); err != nil {
+	//	return nil, err
+	//}
+	//
+	//return &ReaderCloser{fd}, nil
+	return &ReaderCloser{}, nil
 }
 
 // Read implements reading function for uevent.
 func (r *ReaderCloser) Read(p []byte) (int, error) {
-	count, err := unix.Read(r.fd, p)
-	if count < 0 && err != nil {
-		count = 0
-	}
-	return count, err
+	//count, err := unix.Read(r.fd, p)
+	//if count < 0 && err != nil {
+	//	count = 0
+	//}
+	//return count, err
+	return 0, nil
 }
 
 // Close implements closing function for uevent.
 func (r *ReaderCloser) Close() error {
-	return unix.Close(r.fd)
+	//return unix.Close(r.fd)
+	return nil
 }
 
 // Uevent represents a single uevent.

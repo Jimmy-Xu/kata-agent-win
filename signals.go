@@ -25,10 +25,10 @@ var handledSignalsMap = map[syscall.Signal]bool{
 	syscall.SIGILL:    true,
 	syscall.SIGQUIT:   true,
 	syscall.SIGSEGV:   true,
-	syscall.SIGSTKFLT: true,
-	syscall.SIGSYS:    true,
+	//syscall.SIGSTKFLT: true,
+	//syscall.SIGSYS:    true,
 	syscall.SIGTRAP:   true,
-	syscall.SIGUSR1:   false,
+	//syscall.SIGUSR1:   false,
 }
 
 func handlePanic() {
@@ -92,7 +92,7 @@ func die(ctx context.Context) {
 
 	if crashOnError {
 		signal.Reset(syscall.SIGABRT)
-		syscall.Kill(0, syscall.SIGABRT)
+		//syscall.Kill(0, syscall.SIGABRT)
 	}
 
 	os.Exit(1)

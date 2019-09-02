@@ -25,16 +25,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/kata-containers/agent/pkg/uevent"
+	//"github.com/kata-containers/agent/pkg/uevent"
 	pb "github.com/kata-containers/agent/protocols/grpc"
-	"github.com/opencontainers/runc/libcontainer"
-	"github.com/opencontainers/runc/libcontainer/configs"
-	_ "github.com/opencontainers/runc/libcontainer/nsenter"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	"golang.org/x/sys/unix"
+	//"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
@@ -84,7 +81,7 @@ type process struct {
 	sync.RWMutex
 
 	id          string
-	process     libcontainer.Process
+	//process     libcontainer.Process
 	stdin       *os.File
 	stdout      *os.File
 	stderr      *os.File
@@ -101,8 +98,8 @@ type container struct {
 
 	id              string
 	initProcess     *process
-	container       libcontainer.Container
-	config          configs.Config
+	//container       libcontainer.Container
+	//config          configs.Config
 	processes       map[string]*process
 	mounts          []string
 	useSandboxPidNs bool
@@ -121,7 +118,7 @@ type sandbox struct {
 	hostname          string
 	containers        map[string]*container
 	channel           channel
-	network           network
+	//network           network
 	wg                sync.WaitGroup
 	sharedPidNs       namespace
 	mounts            []string
@@ -188,21 +185,21 @@ var commCh = unknownCh
 // duplicated and it is our responsibility to close them since we have opened
 // them.
 func (p *process) closePostStartFDs() {
-	if p.process.Stdin != nil {
-		p.process.Stdin.(*os.File).Close()
-	}
-
-	if p.process.Stdout != nil {
-		p.process.Stdout.(*os.File).Close()
-	}
-
-	if p.process.Stderr != nil {
-		p.process.Stderr.(*os.File).Close()
-	}
-
-	if p.process.ConsoleSocket != nil {
-		p.process.ConsoleSocket.Close()
-	}
+	//if p.process.Stdin != nil {
+	//	p.process.Stdin.(*os.File).Close()
+	//}
+	//
+	//if p.process.Stdout != nil {
+	//	p.process.Stdout.(*os.File).Close()
+	//}
+	//
+	//if p.process.Stderr != nil {
+	//	p.process.Stderr.(*os.File).Close()
+	//}
+	//
+	//if p.process.ConsoleSocket != nil {
+	//	p.process.ConsoleSocket.Close()
+	//}
 
 	if p.consoleSock != nil {
 		p.consoleSock.Close()
@@ -264,9 +261,9 @@ func (c *container) removeContainer() error {
 	// This will terminates all processes related to this container, and
 	// destroy the container right after. But this will error in case the
 	// container in not in the right state.
-	if err := c.container.Destroy(); err != nil {
-		return err
-	}
+	//if err := c.container.Destroy(); err != nil {
+	//	return err
+	//}
 
 	return removeMounts(c.mounts)
 }
@@ -569,11 +566,12 @@ func (s *sandbox) unmountSharedNamespaces() error {
 	span, _ := s.trace("unmountSharedNamespaces")
 	defer span.Finish()
 
-	if err := unix.Unmount(s.sharedIPCNs.path, unix.MNT_DETACH); err != nil {
-		return err
-	}
-
-	return unix.Unmount(s.sharedUTSNs.path, unix.MNT_DETACH)
+	//if err := unix.Unmount(s.sharedIPCNs.path, unix.MNT_DETACH); err != nil {
+	//	return err
+	//}
+	//
+	//return unix.Unmount(s.sharedUTSNs.path, unix.MNT_DETACH)
+	return nil
 }
 
 // setupSharedPidNs will reexec this binary in order to execute the C routine
@@ -588,11 +586,11 @@ func (s *sandbox) setupSharedPidNs() error {
 
 	cmd := &exec.Cmd{
 		Path: selfBinPath,
-		Args: []string{os.Args[0], pauseBinArg},
+		//Args: []string{os.Args[0], pauseBinArg},
 	}
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWPID,
+		//Cloneflags: syscall.CLONE_NEWPID,
 	}
 
 	exitCodeCh, err := s.subreaper.start(cmd)
@@ -682,95 +680,95 @@ func (s *sandbox) waitForStopServer() {
 }
 
 func (s *sandbox) listenToUdevEvents() {
-	fieldLogger := agentLog.WithField("subsystem", "udevlistener")
-
-	uEvHandler, err := uevent.NewHandler()
-	if err != nil {
-		fieldLogger.Warnf("Error starting uevent listening loop %s", err)
-		return
-	}
-	defer uEvHandler.Close()
-
-	fieldLogger.Infof("Started listening for uevents")
-
-	for {
-		uEv, err := uEvHandler.Read()
-		if err != nil {
-			fieldLogger.Error(err)
-			continue
-		}
-
-		// We only care about add event
-		if uEv.Action != "add" {
-			continue
-		}
-
-		span, _ := trace(rootContext, "udev", "udev event")
-		span.SetTag("udev-action", uEv.Action)
-		span.SetTag("udev-name", uEv.DevName)
-		span.SetTag("udev-path", uEv.DevPath)
-		span.SetTag("udev-subsystem", uEv.SubSystem)
-		span.SetTag("udev-seqno", uEv.SeqNum)
-
-		fieldLogger = fieldLogger.WithFields(logrus.Fields{
-			"uevent-action":    uEv.Action,
-			"uevent-devpath":   uEv.DevPath,
-			"uevent-subsystem": uEv.SubSystem,
-			"uevent-seqnum":    uEv.SeqNum,
-			"uevent-devname":   uEv.DevName,
-		})
-
-		fieldLogger.Infof("Received add uevent")
-
-		// Check if device hotplug event results in a device node being created.
-		if uEv.DevName != "" && strings.HasPrefix(uEv.DevPath, rootBusPath) {
-			// Lock is needed to safey read and modify the pciDeviceMap and deviceWatchers.
-			// This makes sure that watchers do not access the map while it is being updated.
-			s.Lock()
-
-			// Add the device node name to the pci device map.
-			s.pciDeviceMap[uEv.DevPath] = uEv.DevName
-
-			// Notify watchers that are interested in the udev event.
-			// Close the channel after watcher has been notified.
-			for devAddress, ch := range s.deviceWatchers {
-				if ch == nil {
-					continue
-				}
-
-				fieldLogger.Infof("Got a wait channel for device %s", devAddress)
-
-				// blk driver case
-				if strings.HasPrefix(uEv.DevPath, filepath.Join(rootBusPath, devAddress)) {
-					goto OUT
-				}
-
-				if strings.Contains(uEv.DevPath, devAddress) {
-					// scsi driver case
-					if strings.HasSuffix(devAddress, scsiBlockSuffix) {
-						goto OUT
-					}
-				}
-
-				continue
-
-			OUT:
-				ch <- uEv.DevName
-				close(ch)
-				delete(s.deviceWatchers, devAddress)
-
-			}
-
-			s.Unlock()
-		} else if onlinePath := filepath.Join(sysfsDir, uEv.DevPath, "online"); strings.HasPrefix(onlinePath, sysfsMemOnlinePath) {
-			// Check memory hotplug and online if possible
-			if err := ioutil.WriteFile(onlinePath, []byte("1"), 0600); err != nil {
-				fieldLogger.WithError(err).Error("failed online device")
-			}
-		}
-
-		span.Finish()
-	}
+	//fieldLogger := agentLog.WithField("subsystem", "udevlistener")
+	//
+	//uEvHandler, err := uevent.NewHandler()
+	//if err != nil {
+	//	fieldLogger.Warnf("Error starting uevent listening loop %s", err)
+	//	return
+	//}
+	//defer uEvHandler.Close()
+	//
+	//fieldLogger.Infof("Started listening for uevents")
+	//
+	//for {
+	//	uEv, err := uEvHandler.Read()
+	//	if err != nil {
+	//		fieldLogger.Error(err)
+	//		continue
+	//	}
+	//
+	//	// We only care about add event
+	//	if uEv.Action != "add" {
+	//		continue
+	//	}
+	//
+	//	span, _ := trace(rootContext, "udev", "udev event")
+	//	span.SetTag("udev-action", uEv.Action)
+	//	span.SetTag("udev-name", uEv.DevName)
+	//	span.SetTag("udev-path", uEv.DevPath)
+	//	span.SetTag("udev-subsystem", uEv.SubSystem)
+	//	span.SetTag("udev-seqno", uEv.SeqNum)
+	//
+	//	fieldLogger = fieldLogger.WithFields(logrus.Fields{
+	//		"uevent-action":    uEv.Action,
+	//		"uevent-devpath":   uEv.DevPath,
+	//		"uevent-subsystem": uEv.SubSystem,
+	//		"uevent-seqnum":    uEv.SeqNum,
+	//		"uevent-devname":   uEv.DevName,
+	//	})
+	//
+	//	fieldLogger.Infof("Received add uevent")
+	//
+	//	// Check if device hotplug event results in a device node being created.
+	//	if uEv.DevName != "" && strings.HasPrefix(uEv.DevPath, rootBusPath) {
+	//		// Lock is needed to safey read and modify the pciDeviceMap and deviceWatchers.
+	//		// This makes sure that watchers do not access the map while it is being updated.
+	//		s.Lock()
+	//
+	//		// Add the device node name to the pci device map.
+	//		s.pciDeviceMap[uEv.DevPath] = uEv.DevName
+	//
+	//		// Notify watchers that are interested in the udev event.
+	//		// Close the channel after watcher has been notified.
+	//		for devAddress, ch := range s.deviceWatchers {
+	//			if ch == nil {
+	//				continue
+	//			}
+	//
+	//			fieldLogger.Infof("Got a wait channel for device %s", devAddress)
+	//
+	//			// blk driver case
+	//			if strings.HasPrefix(uEv.DevPath, filepath.Join(rootBusPath, devAddress)) {
+	//				goto OUT
+	//			}
+	//
+	//			if strings.Contains(uEv.DevPath, devAddress) {
+	//				// scsi driver case
+	//				if strings.HasSuffix(devAddress, scsiBlockSuffix) {
+	//					goto OUT
+	//				}
+	//			}
+	//
+	//			continue
+	//
+	//		OUT:
+	//			ch <- uEv.DevName
+	//			close(ch)
+	//			delete(s.deviceWatchers, devAddress)
+	//
+	//		}
+	//
+	//		s.Unlock()
+	//	} else if onlinePath := filepath.Join(sysfsDir, uEv.DevPath, "online"); strings.HasPrefix(onlinePath, sysfsMemOnlinePath) {
+	//		// Check memory hotplug and online if possible
+	//		if err := ioutil.WriteFile(onlinePath, []byte("1"), 0600); err != nil {
+	//			fieldLogger.WithError(err).Error("failed online device")
+	//		}
+	//	}
+	//
+	//	span.Finish()
+	//}
 }
 
 // This loop is meant to be run inside a separate Go routine.
@@ -779,22 +777,22 @@ func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
 	// and is not inherited by children created by fork(2) and clone(2).
 	runtime.LockOSThread()
 	// Set agent as subreaper
-	err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, uintptr(1), 0, 0, 0)
-	if err != nil {
-		errCh <- err
-		return
-	}
-	close(errCh)
+	//err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, uintptr(1), 0, 0, 0)
+	//if err != nil {
+	//	errCh <- err
+	//	return
+	//}
+	//close(errCh)
 
 	for sig := range sigCh {
 		logger := agentLog.WithField("signal", sig)
 
-		if sig == unix.SIGCHLD {
-			if err := s.subreaper.reap(); err != nil {
-				logger.WithError(err).Error("failed to reap")
-				continue
-			}
-		}
+		//if sig == unix.SIGCHLD {
+		//	if err := s.subreaper.reap(); err != nil {
+		//		logger.WithError(err).Error("failed to reap")
+		//		continue
+		//	}
+		//}
 
 		nativeSignal, ok := sig.(syscall.Signal)
 		if !ok {
@@ -823,7 +821,7 @@ func (s *sandbox) setupSignalHandler() error {
 	defer span.Finish()
 
 	sigCh := make(chan os.Signal, 512)
-	signal.Notify(sigCh, unix.SIGCHLD)
+	//signal.Notify(sigCh, unix.SIGCHLD)
 
 	for _, sig := range handledSignals() {
 		signal.Notify(sigCh, sig)
@@ -1197,11 +1195,11 @@ func mountToRootfs(m initMount) error {
 		return err
 	}
 
-	flags, options := parseMountFlagsAndOptions(m.options)
+	//flags, options := parseMountFlagsAndOptions(m.options)
 
-	if err := syscall.Mount(m.src, m.dest, m.fstype, uintptr(flags), options); err != nil {
-		return grpcStatus.Errorf(codes.Internal, "Could not mount %v to %v: %v", m.src, m.dest, err)
-	}
+	//if err := syscall.Mount(m.src, m.dest, m.fstype, uintptr(flags), options); err != nil {
+	//	return grpcStatus.Errorf(codes.Internal, "Could not mount %v to %v: %v", m.src, m.dest, err)
+	//}
 	return nil
 }
 
@@ -1265,11 +1263,11 @@ func setupDebugConsole(ctx context.Context, debugConsolePath string) error {
 	cmd.Stderr = f
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		// Create Session
-		Setsid: true,
-		// Set Controlling terminal to Ctty
-		Setctty: true,
-		Ctty:    int(f.Fd()),
+		//// Create Session
+		//Setsid: true,
+		//// Set Controlling terminal to Ctty
+		//Setctty: true,
+		//Ctty:    int(f.Fd()),
 	}
 
 	go func() {
@@ -1305,8 +1303,8 @@ func initAgentAsInit() error {
 	if err := syscall.Symlink("/dev/pts/ptmx", "/dev/ptmx"); err != nil {
 		return err
 	}
-	syscall.Setsid()
-	syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TIOCSCTTY, 1)
+	//syscall.Setsid()
+	//syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TIOCSCTTY, 1)
 	os.Setenv("PATH", "/bin:/sbin/:/usr/bin/:/usr/sbin/")
 
 	return announce()
@@ -1316,10 +1314,10 @@ func init() {
 	if len(os.Args) > 1 && os.Args[1] == "init" {
 		runtime.GOMAXPROCS(1)
 		runtime.LockOSThread()
-		factory, _ := libcontainer.New("")
-		if err := factory.StartInitialization(); err != nil {
-			agentLog.WithError(err).Error("init failed")
-		}
+		//factory, _ := libcontainer.New("")
+		//if err := factory.StartInitialization(); err != nil {
+		//	agentLog.WithError(err).Error("init failed")
+		//}
 		panic("--this line should have never been executed, congratulations--")
 	}
 }
@@ -1387,9 +1385,9 @@ func realMain() error {
 		return fmt.Errorf("failed to setup signal handler: %v", err)
 	}
 
-	if err = s.handleLocalhost(); err != nil {
-		return fmt.Errorf("failed to handle localhost: %v", err)
-	}
+	//if err = s.handleLocalhost(); err != nil {
+	//	return fmt.Errorf("failed to handle localhost: %v", err)
+	//}
 
 	// Check for vsock vs serial. This will fill the sandbox structure with
 	// information about the channel.
@@ -1410,7 +1408,7 @@ func realMain() error {
 		// If tracing is not enabled, the agent should continue to run
 		// until the VM is killed by the runtime.
 		agentLog.Debug("waiting to be killed")
-		syscall.Pause()
+		//syscall.Pause()
 	}
 
 	// Report any traces before shutdown. This is not required if the

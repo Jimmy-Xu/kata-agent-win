@@ -10,19 +10,16 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	pb "github.com/kata-containers/agent/protocols/grpc"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	grpcStatus "google.golang.org/grpc/status"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
-
-	pb "github.com/kata-containers/agent/protocols/grpc"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
-	"google.golang.org/grpc/codes"
-	grpcStatus "google.golang.org/grpc/status"
 )
 
 const (
@@ -35,33 +32,33 @@ const (
 )
 
 var flagList = map[string]int{
-	"acl":         unix.MS_POSIXACL,
-	"bind":        unix.MS_BIND,
-	"defaults":    0,
-	"dirsync":     unix.MS_DIRSYNC,
-	"iversion":    unix.MS_I_VERSION,
-	"lazytime":    unix.MS_LAZYTIME,
-	"mand":        unix.MS_MANDLOCK,
-	"noatime":     unix.MS_NOATIME,
-	"nodev":       unix.MS_NODEV,
-	"nodiratime":  unix.MS_NODIRATIME,
-	"noexec":      unix.MS_NOEXEC,
-	"nosuid":      unix.MS_NOSUID,
-	"rbind":       unix.MS_BIND | unix.MS_REC,
-	"relatime":    unix.MS_RELATIME,
-	"remount":     unix.MS_REMOUNT,
-	"ro":          unix.MS_RDONLY,
-	"silent":      unix.MS_SILENT,
-	"strictatime": unix.MS_STRICTATIME,
-	"sync":        unix.MS_SYNCHRONOUS,
-	"private":     unix.MS_PRIVATE,
-	"shared":      unix.MS_SHARED,
-	"slave":       unix.MS_SLAVE,
-	"unbindable":  unix.MS_UNBINDABLE,
-	"rprivate":    unix.MS_PRIVATE | unix.MS_REC,
-	"rshared":     unix.MS_SHARED | unix.MS_REC,
-	"rslave":      unix.MS_SLAVE | unix.MS_REC,
-	"runbindable": unix.MS_UNBINDABLE | unix.MS_REC,
+	//"acl":         unix.MS_POSIXACL,
+	//"bind":        unix.MS_BIND,
+	//"defaults":    0,
+	//"dirsync":     unix.MS_DIRSYNC,
+	//"iversion":    unix.MS_I_VERSION,
+	//"lazytime":    unix.MS_LAZYTIME,
+	//"mand":        unix.MS_MANDLOCK,
+	//"noatime":     unix.MS_NOATIME,
+	//"nodev":       unix.MS_NODEV,
+	//"nodiratime":  unix.MS_NODIRATIME,
+	//"noexec":      unix.MS_NOEXEC,
+	//"nosuid":      unix.MS_NOSUID,
+	//"rbind":       unix.MS_BIND | unix.MS_REC,
+	//"relatime":    unix.MS_RELATIME,
+	//"remount":     unix.MS_REMOUNT,
+	//"ro":          unix.MS_RDONLY,
+	//"silent":      unix.MS_SILENT,
+	//"strictatime": unix.MS_STRICTATIME,
+	//"sync":        unix.MS_SYNCHRONOUS,
+	//"private":     unix.MS_PRIVATE,
+	//"shared":      unix.MS_SHARED,
+	//"slave":       unix.MS_SLAVE,
+	//"unbindable":  unix.MS_UNBINDABLE,
+	//"rprivate":    unix.MS_PRIVATE | unix.MS_REC,
+	//"rshared":     unix.MS_SHARED | unix.MS_REC,
+	//"rslave":      unix.MS_SLAVE | unix.MS_REC,
+	//"runbindable": unix.MS_UNBINDABLE | unix.MS_REC,
 }
 
 func createDestinationDir(dest string) error {
@@ -123,11 +120,11 @@ func mount(source, destination, fsType string, flags int, options string) error 
 		}
 	}
 
-	if err = syscall.Mount(absSource, destination,
-		fsType, uintptr(flags), options); err != nil {
-		return grpcStatus.Errorf(codes.Internal, "Could not mount %v to %v: %v",
-			absSource, destination, err)
-	}
+	//if err = syscall.Mount(absSource, destination,
+	//	fsType, uintptr(flags), options); err != nil {
+	//	return grpcStatus.Errorf(codes.Internal, "Could not mount %v to %v: %v",
+	//		absSource, destination, err)
+	//}
 
 	return nil
 }
@@ -194,11 +191,11 @@ func parseOptions(optionList []string) map[string]string {
 }
 
 func removeMounts(mounts []string) error {
-	for _, mount := range mounts {
-		if err := syscall.Unmount(mount, 0); err != nil {
-			return err
-		}
-	}
+	//for _, mount := range mounts {
+	//	if err := syscall.Unmount(mount, 0); err != nil {
+	//		return err
+	//	}
+	//}
 
 	return nil
 }
