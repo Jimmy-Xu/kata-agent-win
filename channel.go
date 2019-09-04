@@ -9,7 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
-	//"github.com/mdlayher/vsock"
+
 	"io/ioutil"
 	"net"
 	"os"
@@ -19,9 +19,9 @@ import (
 
 	"github.com/hashicorp/yamux"
 	//"github.com/mdlayher/vsock"
-	//"golang.org/x/sys/unix"
-	"google.golang.org/grpc/codes"
-	grpcStatus "google.golang.org/grpc/status"
+	"github.com/sirupsen/logrus"
+
+	"github.com/kata-containers/agent/pkg/serial"
 )
 
 var (
@@ -50,20 +50,28 @@ func newChannel(ctx context.Context) (channel, error) {
 	span, _ := trace(ctx, "channel", "newChannel")
 	defer span.Finish()
 
+	logrus.Infof("newChannel - begin")
+	defer logrus.Infof("newChannel - end")
+
 	var serialErr error
 	//var vsockErr error
 	var ch channel
 
+	//specify channel
+	commCh = serialCh
+	logrus.Infof("newChannel:%v", commCh)
 	for i := 0; i < channelExistMaxTries; i++ {
 		switch commCh {
 		case serialCh:
 			if ch, serialErr = checkForSerialChannel(ctx); serialErr == nil && ch.(*serialChannel) != nil {
 				return ch, nil
+			} else {
+				logrus.Infof("ch:%v err:%v", ch, serialErr)
 			}
-		case vsockCh:
-			//if ch, vsockErr = checkForVsockChannel(ctx); vsockErr == nil && ch.(*vSockChannel) != nil {
-			//	return ch, nil
-			//}
+		//case vsockCh:
+		//	//if ch, vsockErr = checkForVsockChannel(ctx); vsockErr == nil && ch.(*vSockChannel) != nil {
+		//	//	return ch, nil
+		//	//}
 
 		case unknownCh:
 			// If we have not been explicitly passed if vsock is used or not, maybe due to
@@ -94,6 +102,8 @@ func checkForSerialChannel(ctx context.Context) (*serialChannel, error) {
 	span, _ := trace(ctx, "channel", "checkForSerialChannel")
 	defer span.Finish()
 
+	logrus.Infof("checkForSerialChannel: %v", serialChannelName)
+
 	// Check serial port path
 	serialPath, serialErr := findVirtualSerialPath(serialChannelName)
 	if serialErr == nil {
@@ -101,29 +111,31 @@ func checkForSerialChannel(ctx context.Context) (*serialChannel, error) {
 		span.SetTag("serial-path", serialPath)
 		agentLog.Debug("Serial channel type detected")
 		return &serialChannel{serialPath: serialPath}, nil
+	} else {
+		logrus.Errorf("serialPath:%v, serialErr:%v", serialPath, serialErr)
 	}
 
 	return nil, serialErr
 }
 
-func checkForVsockChannel(ctx context.Context) (*vSockChannel, error) {
-	span, _ := trace(ctx, "channel", "checkForVsockChannel")
-	defer span.Finish()
-
-	// check vsock path
-	if _, err := os.Stat(vSockDevPath); err != nil {
-		return nil, err
-	}
-
-	vSockSupported, vsockErr := isAFVSockSupportedFunc()
-	if vSockSupported && vsockErr == nil {
-		span.SetTag("channel-type", "vsock")
-		agentLog.Debug("Vsock channel type detected")
-		return &vSockChannel{}, nil
-	}
-
-	return nil, fmt.Errorf("Vsock not found : %s", vsockErr)
-}
+//func checkForVsockChannel(ctx context.Context) (*vSockChannel, error) {
+//	span, _ := trace(ctx, "channel", "checkForVsockChannel")
+//	defer span.Finish()
+//
+//	// check vsock path
+//	if _, err := os.Stat(vSockDevPath); err != nil {
+//		return nil, err
+//	}
+//
+//	vSockSupported, vsockErr := isAFVSockSupportedFunc()
+//	if vSockSupported && vsockErr == nil {
+//		span.SetTag("channel-type", "vsock")
+//		agentLog.Debug("Vsock channel type detected")
+//		return &vSockChannel{}, nil
+//	}
+//
+//	return nil, fmt.Errorf("Vsock not found : %s", vsockErr)
+//}
 
 type vSockChannel struct {
 }
@@ -152,23 +164,42 @@ func (c *vSockChannel) teardown() error {
 
 type serialChannel struct {
 	serialPath string
-	serialConn *os.File
+	//serialConn *os.File
+	serialConn *serial.Port
 	waitCh     <-chan struct{}
 }
 
 func (c *serialChannel) setup() error {
 	// Open serial channel.
-	file, err := os.OpenFile(c.serialPath, os.O_RDWR, os.ModeDevice)
-	if err != nil {
-		return err
-	}
+	//file, err := os.OpenFile(c.serialPath, os.O_RDWR, os.ModeDevice)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//c.serialConn = file
 
-	c.serialConn = file
+	logrus.Infof("serialChannel.setup() - begin")
+	defer logrus.Infof("serialChannel.setup() - end")
+
+	com := &serial.Config{Name: c.serialPath}
+	s, err := serial.OpenPort(com)
+	if err != nil {
+		//if c.serialConn != nil {
+		//	logrus.Warnf("failed to open serial port %v again, error:%v", c.serialPath, err)
+		//	return nil
+		//}
+		logrus.Fatalf("failed to open serial port %v, error:%v", c.serialPath, err)
+	}
+	logrus.Infof("setup() - open serial port %v ok", c.serialPath)
+	c.serialConn = s
 
 	return nil
 }
 
 func (c *serialChannel) wait() error {
+	logrus.Infof("serialChannel.wait() - begin")
+	defer logrus.Infof("serialChannel.wait() - end")
+
 	//var event unix.EpollEvent
 	//var events [1]unix.EpollEvent
 	//
@@ -239,6 +270,9 @@ func (yw yamuxWriter) Write(bytes []byte) (int, error) {
 }
 
 func (c *serialChannel) listen() (net.Listener, error) {
+	logrus.Infof("serialChannel.listen() - begin")
+	defer logrus.Infof("serialChannel.listen() - end")
+
 	config := yamux.DefaultConfig()
 	// yamux client runs on the proxy side, sometimes the client is
 	// handling other requests and it's not able to response to the
@@ -253,6 +287,7 @@ func (c *serialChannel) listen() (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+	logrus.Infof("listen() - init yamux server over serialport:%v ok", c.serialPath)
 	c.waitCh = session.CloseChan()
 
 	return session, nil
@@ -260,6 +295,9 @@ func (c *serialChannel) listen() (net.Listener, error) {
 
 func (c *serialChannel) teardown() error {
 	// wait for the session to be fully shutdown first
+	logrus.Infof("serialChannel.teardown() - begin")
+	defer logrus.Infof("serialChannel.teardown() - end")
+
 	if c.waitCh != nil {
 		t := time.NewTimer(channelCloseTimeout)
 		select {
@@ -320,33 +358,35 @@ func isAFVSockSupported() (bool, error) {
 }
 
 func findVirtualSerialPath(serialName string) (string, error) {
-	dir, err := os.Open(virtIOPath)
+	dir, err := os.Open(serialName)
 	if err != nil {
 		return "", err
 	}
 
 	defer dir.Close()
 
-	ports, err := dir.Readdirnames(0)
-	if err != nil {
-		return "", err
-	}
+	//ports, err := dir.Readdirnames(0)
+	//if err != nil {
+	//	return "", err
+	//}
+	//
+	//for _, port := range ports {
+	//	path := filepath.Join(virtIOPath, port, "name")
+	//	content, err := ioutil.ReadFile(path)
+	//	if err != nil {
+	//		if os.IsNotExist(err) {
+	//			agentLog.WithField("file", path).Debug("Skip parsing of non-existent file")
+	//			continue
+	//		}
+	//		return "", err
+	//	}
+	//
+	//	if strings.Contains(string(content), serialName) {
+	//		return filepath.Join(devRootPath, port), nil
+	//	}
+	//}
 
-	for _, port := range ports {
-		path := filepath.Join(virtIOPath, port, "name")
-		content, err := ioutil.ReadFile(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				agentLog.WithField("file", path).Debug("Skip parsing of non-existent file")
-				continue
-			}
-			return "", err
-		}
+	return serialName, nil
 
-		if strings.Contains(string(content), serialName) {
-			return filepath.Join(devRootPath, port), nil
-		}
-	}
-
-	return "", grpcStatus.Errorf(codes.NotFound, "Could not find virtio port %s", serialName)
+	//return "", grpcStatus.Errorf(codes.NotFound, "Could not find virtio port %s", serialName)
 }

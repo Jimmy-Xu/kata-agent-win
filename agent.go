@@ -87,7 +87,7 @@ type process struct {
 	stderr      *os.File
 	consoleSock *os.File
 	termMaster  *os.File
-	epoller     *epoller
+	//epoller     *epoller
 	exitCodeCh  chan int
 	sync.Once
 	stdinClosed bool
@@ -120,15 +120,15 @@ type sandbox struct {
 	channel           channel
 	//network           network
 	wg                sync.WaitGroup
-	sharedPidNs       namespace
+	//sharedPidNs       namespace
 	mounts            []string
-	subreaper         reaper
+	//subreaper         reaper
 	server            *grpc.Server
 	pciDeviceMap      map[string]string
 	deviceWatchers    map[string](chan string)
-	sharedUTSNs       namespace
-	sharedIPCNs       namespace
-	guestHooks        *specs.Hooks
+	//sharedUTSNs       namespace
+	//sharedIPCNs       namespace
+	//guestHooks        *specs.Hooks
 	guestHooksPresent bool
 	running           bool
 	noPivotRoot       bool
@@ -226,9 +226,9 @@ func (p *process) closePostExitFDs() {
 		p.stderr.Close()
 	}
 
-	if p.epoller != nil {
-		p.epoller.sockR.Close()
-	}
+	//if p.epoller != nil {
+	//	p.epoller.sockR.Close()
+	//}
 }
 
 func (c *container) trace(name string) (opentracing.Span, context.Context) {
@@ -315,22 +315,22 @@ func (s *sandbox) setSandboxStorage(path string) bool {
 // scanGuestHooks will search the given guestHookPath
 // for any OCI hooks
 func (s *sandbox) scanGuestHooks(guestHookPath string) {
-	span, _ := s.trace("scanGuestHooks")
-	span.SetTag("guest-hook-path", guestHookPath)
-	defer span.Finish()
-
-	fieldLogger := agentLog.WithField("oci-hook-path", guestHookPath)
-	fieldLogger.Info("Scanning guest filesystem for OCI hooks")
-
-	s.guestHooks.Prestart = findHooks(guestHookPath, "prestart")
-	s.guestHooks.Poststart = findHooks(guestHookPath, "poststart")
-	s.guestHooks.Poststop = findHooks(guestHookPath, "poststop")
-
-	if len(s.guestHooks.Prestart) > 0 || len(s.guestHooks.Poststart) > 0 || len(s.guestHooks.Poststop) > 0 {
-		s.guestHooksPresent = true
-	} else {
-		fieldLogger.Warn("Guest hooks were requested but none were found")
-	}
+	//span, _ := s.trace("scanGuestHooks")
+	//span.SetTag("guest-hook-path", guestHookPath)
+	//defer span.Finish()
+	//
+	//fieldLogger := agentLog.WithField("oci-hook-path", guestHookPath)
+	//fieldLogger.Info("Scanning guest filesystem for OCI hooks")
+	//
+	//s.guestHooks.Prestart = findHooks(guestHookPath, "prestart")
+	//s.guestHooks.Poststart = findHooks(guestHookPath, "poststart")
+	//s.guestHooks.Poststop = findHooks(guestHookPath, "poststop")
+	//
+	//if len(s.guestHooks.Prestart) > 0 || len(s.guestHooks.Poststart) > 0 || len(s.guestHooks.Poststop) > 0 {
+	//	s.guestHooksPresent = true
+	//} else {
+	//	fieldLogger.Warn("Guest hooks were requested but none were found")
+	//}
 }
 
 // addGuestHooks will add any guest OCI hooks that were
@@ -347,9 +347,9 @@ func (s *sandbox) addGuestHooks(spec *specs.Spec) {
 		spec.Hooks = &specs.Hooks{}
 	}
 
-	spec.Hooks.Prestart = append(spec.Hooks.Prestart, s.guestHooks.Prestart...)
-	spec.Hooks.Poststart = append(spec.Hooks.Poststart, s.guestHooks.Poststart...)
-	spec.Hooks.Poststop = append(spec.Hooks.Poststop, s.guestHooks.Poststop...)
+	//spec.Hooks.Prestart = append(spec.Hooks.Prestart, s.guestHooks.Prestart...)
+	//spec.Hooks.Poststart = append(spec.Hooks.Poststart, s.guestHooks.Poststart...)
+	//spec.Hooks.Poststop = append(spec.Hooks.Poststop, s.guestHooks.Poststop...)
 }
 
 // unSetSandboxStorage will decrement the sandbox storage
@@ -519,7 +519,7 @@ func (s *sandbox) readStdio(cid, execID string, length int, stdout bool) ([]byte
 		// needed to be read out in its terminal, thus following read on it will read out
 		// "EOF" to terminate this process's io since the other end of this pipe has been
 		// closed in reap().
-		file, err = proc.epoller.run()
+		//file, err = proc.epoller.run()
 		if err != nil {
 			return nil, err
 		}
@@ -542,22 +542,22 @@ func (s *sandbox) readStdio(cid, execID string, length int, stdout bool) ([]byte
 }
 
 func (s *sandbox) setupSharedNamespaces(ctx context.Context) error {
-	span, _ := trace(ctx, "sandbox", "setupSharedNamespaces")
-	defer span.Finish()
-
-	// Set up shared IPC namespace
-	ns, err := setupPersistentNs(nsTypeIPC)
-	if err != nil {
-		return err
-	}
-	s.sharedIPCNs = *ns
-
-	// Set up shared UTS namespace
-	ns, err = setupPersistentNs(nsTypeUTS)
-	if err != nil {
-		return err
-	}
-	s.sharedUTSNs = *ns
+	//span, _ := trace(ctx, "sandbox", "setupSharedNamespaces")
+	//defer span.Finish()
+	//
+	//// Set up shared IPC namespace
+	//ns, err := setupPersistentNs(nsTypeIPC)
+	//if err != nil {
+	//	return err
+	//}
+	//s.sharedIPCNs = *ns
+	//
+	//// Set up shared UTS namespace
+	//ns, err = setupPersistentNs(nsTypeUTS)
+	//if err != nil {
+	//	return err
+	//}
+	//s.sharedUTSNs = *ns
 
 	return nil
 }
@@ -581,57 +581,57 @@ func (s *sandbox) unmountSharedNamespaces() error {
 // new PID namespace running into the namespace, preventing the namespace to
 // be destroyed if other processes are terminated.
 func (s *sandbox) setupSharedPidNs() error {
-	span, _ := s.trace("setupSharedPidNs")
-	defer span.Finish()
-
-	cmd := &exec.Cmd{
-		Path: selfBinPath,
-		//Args: []string{os.Args[0], pauseBinArg},
-	}
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		//Cloneflags: syscall.CLONE_NEWPID,
-	}
-
-	exitCodeCh, err := s.subreaper.start(cmd)
-	if err != nil {
-		return err
-	}
-
-	// Save info about this namespace inside sandbox structure.
-	s.sharedPidNs = namespace{
-		path:       fmt.Sprintf("/proc/%d/ns/pid", cmd.Process.Pid),
-		init:       cmd.Process,
-		exitCodeCh: exitCodeCh,
-	}
+	//span, _ := s.trace("setupSharedPidNs")
+	//defer span.Finish()
+	//
+	//cmd := &exec.Cmd{
+	//	Path: selfBinPath,
+	//	//Args: []string{os.Args[0], pauseBinArg},
+	//}
+	//
+	//cmd.SysProcAttr = &syscall.SysProcAttr{
+	//	//Cloneflags: syscall.CLONE_NEWPID,
+	//}
+	//
+	//exitCodeCh, err := s.subreaper.start(cmd)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//// Save info about this namespace inside sandbox structure.
+	//s.sharedPidNs = namespace{
+	//	path:       fmt.Sprintf("/proc/%d/ns/pid", cmd.Process.Pid),
+	//	init:       cmd.Process,
+	//	exitCodeCh: exitCodeCh,
+	//}
 
 	return nil
 }
 
 func (s *sandbox) teardownSharedPidNs() error {
-	span, _ := s.trace("teardownSharedPidNs")
-	defer span.Finish()
-
-	if !s.sandboxPidNs {
-		// We are not in a case where we have created a pause process.
-		// Simply clear out the sharedPidNs path.
-		s.sharedPidNs.path = ""
-		return nil
-	}
-
-	// Terminates the "init" process of the PID namespace.
-	if err := s.sharedPidNs.init.Kill(); err != nil {
-		return err
-	}
-
-	// Using helper function wait() to deal with the subreaper.
-	osProcess := (*reaperOSProcess)(s.sharedPidNs.init)
-	if _, err := s.subreaper.wait(s.sharedPidNs.exitCodeCh, osProcess); err != nil {
-		return err
-	}
-
-	// Empty the sandbox structure.
-	s.sharedPidNs = namespace{}
+	//span, _ := s.trace("teardownSharedPidNs")
+	//defer span.Finish()
+	//
+	//if !s.sandboxPidNs {
+	//	// We are not in a case where we have created a pause process.
+	//	// Simply clear out the sharedPidNs path.
+	//	s.sharedPidNs.path = ""
+	//	return nil
+	//}
+	//
+	//// Terminates the "init" process of the PID namespace.
+	//if err := s.sharedPidNs.init.Kill(); err != nil {
+	//	return err
+	//}
+	//
+	//// Using helper function wait() to deal with the subreaper.
+	//osProcess := (*reaperOSProcess)(s.sharedPidNs.init)
+	//if _, err := s.subreaper.wait(s.sharedPidNs.exitCodeCh, osProcess); err != nil {
+	//	return err
+	//}
+	//
+	//// Empty the sandbox structure.
+	//s.sharedPidNs = namespace{}
 
 	return nil
 }
@@ -773,6 +773,8 @@ func (s *sandbox) listenToUdevEvents() {
 
 // This loop is meant to be run inside a separate Go routine.
 func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
+	logrus.Infof("signalHandlerLoop - begin")
+	defer logrus.Infof("signalHandlerLoop - end")
 	// Lock OS thread as subreaper is a thread local capability
 	// and is not inherited by children created by fork(2) and clone(2).
 	runtime.LockOSThread()
@@ -782,7 +784,8 @@ func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
 	//	errCh <- err
 	//	return
 	//}
-	//close(errCh)
+	logrus.Infof("close(errCh)")
+	close(errCh)
 
 	for sig := range sigCh {
 		logger := agentLog.WithField("signal", sig)
@@ -794,6 +797,7 @@ func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
 		//	}
 		//}
 
+		logger.Infof("signalHandlerLoop - 1")
 		nativeSignal, ok := sig.(syscall.Signal)
 		if !ok {
 			err := errors.New("unknown signal")
@@ -801,11 +805,13 @@ func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
 			continue
 		}
 
+		logger.Infof("signalHandlerLoop - 2")
 		if fatalSignal(nativeSignal) {
 			logger.Error("received fatal signal")
 			die(s.ctx)
 		}
 
+		logger.Infof("signalHandlerLoop - 3")
 		if debug && nonFatalSignal(nativeSignal) {
 			logger.Debug("handling signal")
 			backtrace()
@@ -820,8 +826,11 @@ func (s *sandbox) setupSignalHandler() error {
 	span, _ := s.trace("setupSignalHandler")
 	defer span.Finish()
 
+	logrus.Infof("setupSignalHandler - begin")
+	defer logrus.Infof("setupSignalHandler - end")
+
 	sigCh := make(chan os.Signal, 512)
-	//signal.Notify(sigCh, unix.SIGCHLD)
+	signal.Notify(sigCh, syscall.SIGTERM)
 
 	for _, sig := range handledSignals() {
 		signal.Notify(sigCh, sig)
@@ -884,16 +893,16 @@ func getAnnounceFields() (logrus.Fields, error) {
 		storageHandlers = append(storageHandlers, handler)
 	}
 
-	memTotal, err := getMemory()
-	if err != nil {
-		return logrus.Fields{}, err
-	}
+	//memTotal, err := getMemory()
+	//if err != nil {
+	//	return logrus.Fields{}, err
+	//}
 
 	return logrus.Fields{
 		"version":          version,
 		"device-handlers":  strings.Join(deviceHandlers, ","),
 		"storage-handlers": strings.Join(storageHandlers, ","),
-		"system-memory":    memTotal,
+		//"system-memory":    memTotal,
 	}, nil
 }
 
@@ -939,9 +948,9 @@ func (s *sandbox) initLogger() error {
 	agentLog.Logger.Formatter = &logrus.TextFormatter{DisableColors: true, TimestampFormat: time.RFC3339Nano}
 
 	config := newConfig(defaultLogLevel)
-	if err := config.getConfig(kernelCmdlineFile); err != nil {
-		agentLog.WithError(err).Warn("Failed to get config from kernel cmdline")
-	}
+	//if err := config.getConfig(kernelCmdlineFile); err != nil {
+	//	agentLog.WithError(err).Warn("Failed to get config from kernel cmdline")
+	//}
 
 	agentLog.Logger.SetLevel(config.logLevel)
 
@@ -1345,10 +1354,10 @@ func realMain() error {
 	r := &agentReaper{}
 	r.init()
 
-	fsType, err := getMountFSType("/")
-	if err != nil {
-		return err
-	}
+	//fsType, err := getMountFSType("/")
+	//if err != nil {
+	//	return err
+	//}
 
 	// Initialize unique sandbox structure.
 	s := &sandbox{
@@ -1356,23 +1365,26 @@ func realMain() error {
 		running:    false,
 		// pivot_root won't work for initramfs, see
 		// Documentation/filesystem/ramfs-rootfs-initramfs.txt
-		noPivotRoot:    (fsType == typeRootfs),
-		subreaper:      r,
+		noPivotRoot:    false,//(fsType == typeRootfs),
+		//subreaper:      r,
 		pciDeviceMap:   make(map[string]string),
 		deviceWatchers: make(map[string](chan string)),
 		storages:       make(map[string]*sandboxStorage),
 		stopServer:     make(chan struct{}),
 	}
 
+	logrus.Infof(" s.initLogger()")
 	if err = s.initLogger(); err != nil {
 		return fmt.Errorf("failed to setup logger: %v", err)
 	}
 
+	logrus.Infof("setupTracing: %v", agentName)
 	rootSpan, rootContext, err = setupTracing(agentName)
 	if err != nil {
 		return fmt.Errorf("failed to setup tracing: %v", err)
 	}
 
+	logrus.Infof("setupDebugConsole: %v", debugConsolePath)
 	if err := setupDebugConsole(rootContext, debugConsolePath); err != nil {
 		agentLog.WithError(err).Error("failed to setup debug console")
 	}
@@ -1381,6 +1393,7 @@ func realMain() error {
 	// information.
 	s.ctx = rootContext
 
+	logrus.Infof("s.setupSignalHandler()")
 	if err = s.setupSignalHandler(); err != nil {
 		return fmt.Errorf("failed to setup signal handler: %v", err)
 	}
@@ -1391,17 +1404,22 @@ func realMain() error {
 
 	// Check for vsock vs serial. This will fill the sandbox structure with
 	// information about the channel.
+	logrus.Infof("s.initChannel()")
 	if err = s.initChannel(); err != nil {
 		return fmt.Errorf("failed to setup channels: %v", err)
 	}
 
+	logrus.Infof("s.startGRPC()")
 	// Start gRPC server.
 	s.startGRPC()
 
+	logrus.Infof("s.waitForStopServer()")
 	go s.waitForStopServer()
 
+	logrus.Infof("s.listenToUdevEvents()")
 	go s.listenToUdevEvents()
 
+	logrus.Infof("s.wg.Wait()")
 	s.wg.Wait()
 
 	if !tracing {
@@ -1417,6 +1435,7 @@ func realMain() error {
 		stopTracing(rootContext)
 	}
 
+	logrus.Infof("exit")
 	return nil
 }
 

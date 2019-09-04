@@ -12,7 +12,8 @@ import (
 
 // Serial channel
 var (
-	serialChannelName = "agent.channel.0"
+	//serialChannelName = "agent.channel.0"
+	serialChannelName = `\\.\agent.channel.0` //for windows
 	virtIOPath        = "/sys/class/virtio-ports"
 	devRootPath       = "/dev"
 )

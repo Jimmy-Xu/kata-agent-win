@@ -8,12 +8,10 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	//"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -366,10 +364,12 @@ func buildProcess(agentProcess *pb.Process, procID string, init bool) (*process,
 }
 
 func (a *agentGRPC) Check(ctx context.Context, req *pb.CheckRequest) (*pb.HealthCheckResponse, error) {
+	logrus.Infof("receive [Check] CheckRequest：%v", *req)
 	return &pb.HealthCheckResponse{Status: pb.HealthCheckResponse_SERVING}, nil
 }
 
 func (a *agentGRPC) Version(ctx context.Context, req *pb.CheckRequest) (*pb.VersionCheckResponse, error) {
+	logrus.Infof("receive [Version] CheckRequest：%v", *req)
 	return &pb.VersionCheckResponse{
 		GrpcVersion:  pb.APIVersion,
 		AgentVersion: a.version,
@@ -407,8 +407,8 @@ func (a *agentGRPC) execProcess(ctr *container, proc *process, createContainer b
 	// miss the opportunity to get the exit code, leading WaitProcess() to
 	// wait forever on the new channel.
 	// This lock has to be taken before we run the new process.
-	a.sandbox.subreaper.lock()
-	defer a.sandbox.subreaper.unlock()
+	//a.sandbox.subreaper.lock()
+	//defer a.sandbox.subreaper.unlock()
 
 	//if createContainer {
 	//	err = ctr.container.Start(&proc.process)
@@ -1059,50 +1059,50 @@ func (a *agentGRPC) ListProcesses(ctx context.Context, req *pb.ListProcessesRequ
 	// pids already contains the list of processes that are running
 	// inside a container, now we have to use that list to filter
 	// ps output and return just container's processes
-	cmd := exec.Command("ps", psArgs...)
-	output, err := a.sandbox.subreaper.combinedOutput(cmd)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %s", err, output)
-	}
+	//cmd := exec.Command("ps", psArgs...)
+	//output, err := a.sandbox.subreaper.combinedOutput(cmd)
+	//if err != nil {
+	//	return nil, fmt.Errorf("%s: %s", err, output)
+	//}
 
-	lines := strings.Split(string(output), "\n")
-
-	pidIndex := getPIDIndex(lines[0])
-
-	// PID field not found
-	if pidIndex == -1 {
-		return nil, fmt.Errorf("failed to find PID field in ps output")
-	}
+	//lines := strings.Split(string(output), "\n")
+	//
+	//pidIndex := getPIDIndex(lines[0])
+	//
+	//// PID field not found
+	//if pidIndex == -1 {
+	//	return nil, fmt.Errorf("failed to find PID field in ps output")
+	//}
 
 	// append title
-	var result bytes.Buffer
+	//var result bytes.Buffer
+	//
+	//result.WriteString(lines[0] + "\n")
+	//
+	//for _, line := range lines[1:] {
+	//	if len(line) == 0 {
+	//		continue
+	//	}
+	//	fields := strings.Fields(line)
+	//	if pidIndex >= len(fields) {
+	//		return nil, fmt.Errorf("missing PID field: %s", line)
+	//	}
+	//
+	//	//p, err := strconv.Atoi(fields[pidIndex])
+	//	//if err != nil {
+	//	//	return nil, fmt.Errorf("failed to convert pid to int: %s", fields[pidIndex])
+	//	//}
+	//
+	//	//// appends pid line
+	//	//for _, pid := range pids {
+	//	//	if pid == p {
+	//	//		result.WriteString(line + "\n")
+	//	//		break
+	//	//	}
+	//	//}
+	//}
 
-	result.WriteString(lines[0] + "\n")
-
-	for _, line := range lines[1:] {
-		if len(line) == 0 {
-			continue
-		}
-		fields := strings.Fields(line)
-		if pidIndex >= len(fields) {
-			return nil, fmt.Errorf("missing PID field: %s", line)
-		}
-
-		//p, err := strconv.Atoi(fields[pidIndex])
-		//if err != nil {
-		//	return nil, fmt.Errorf("failed to convert pid to int: %s", fields[pidIndex])
-		//}
-
-		//// appends pid line
-		//for _, pid := range pids {
-		//	if pid == p {
-		//		result.WriteString(line + "\n")
-		//		break
-		//	}
-		//}
-	}
-
-	resp.ProcessList = result.Bytes()
+	//resp.ProcessList = result.Bytes()
 	return resp, nil
 }
 
@@ -1423,7 +1423,7 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 	a.sandbox.running = true
 	a.sandbox.sandboxPidNs = req.SandboxPidns
 	a.sandbox.storages = make(map[string]*sandboxStorage)
-	a.sandbox.guestHooks = &specs.Hooks{}
+	//a.sandbox.guestHooks = &specs.Hooks{}
 	a.sandbox.guestHooksPresent = false
 
 	if req.GuestHookPath != "" {
@@ -1557,6 +1557,7 @@ func (a *agentGRPC) ReseedRandomDev(ctx context.Context, req *pb.ReseedRandomDev
 }
 
 func (a *agentGRPC) GetGuestDetails(ctx context.Context, req *pb.GuestDetailsRequest) (*pb.GuestDetailsResponse, error) {
+	logrus.Infof("receive [GetGuestDetails] GuestDetailsRequest: %v", *req)
 	var details pb.GuestDetailsResponse
 	if req.MemBlockSize {
 		data, err := ioutil.ReadFile(sysfsMemoryBlockSizePath)

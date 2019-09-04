@@ -1,3 +1,5 @@
 kata-agent
 kata-agent.service
 coverage.txt
+.idea
+*.exe

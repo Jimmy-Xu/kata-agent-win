@@ -96,6 +96,7 @@ func (c *agentConfig) parseCmdlineOption(option string) error {
 		return nil
 	}
 
+	logrus.Infof("parseCmdlineOption() - optionPosition:%v", optionPosition)
 	switch split[optionPosition] {
 	case logLevelFlag:
 		level, err := logrus.ParseLevel(split[valuePosition])
