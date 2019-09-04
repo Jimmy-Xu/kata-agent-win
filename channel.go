@@ -66,7 +66,11 @@ func newChannel(ctx context.Context) (channel, error) {
 			if ch, serialErr = checkForSerialChannel(ctx); serialErr == nil && ch.(*serialChannel) != nil {
 				return ch, nil
 			} else {
-				logrus.Infof("ch:%v err:%v", ch, serialErr)
+				if strings.Contains(serialErr.Error(),"Access is denied") {
+					logrus.Fatalf("ch:%v err:%v", ch, serialErr)
+				} else {
+					logrus.Warnf("ch:%v err:%v", ch, serialErr)
+				}
 			}
 		//case vsockCh:
 		//	//if ch, vsockErr = checkForVsockChannel(ctx); vsockErr == nil && ch.(*vSockChannel) != nil {
