@@ -65,9 +65,16 @@ func main() {
 		}
 		err = s.Start()
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+		} else {
+			fmt.Printf("%v started\n", kataService.AgentName)
 		}
-		fmt.Printf("%v started\n", kataService.AgentName)
+		err = kataService.FailureRecory()
+		if err != nil {
+			log.Println(err)
+		} else {
+			fmt.Printf("%v set recovery action ok\n", kataService.AgentName)
+		}
 	case "uninstall":
 		s.Stop()
 		if err != nil {

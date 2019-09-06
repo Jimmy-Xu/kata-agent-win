@@ -37,13 +37,13 @@ import (
 type Service struct{}
 
 func (s *Service) Start(srv service.Service) error {
-	log.Println("开始服务")
+	log.Println("start kata-agent service")
 	go s.run()
 	return nil
 }
 
 func (s *Service) Stop(srv service.Service) error {
-	log.Println("停止服务")
+	log.Println("stop kata-agent service")
 	srv.Stop()
 	return nil
 }
@@ -187,7 +187,7 @@ var initRootfsMounts = []initMount{
 
 var ServiceConfig = &service.Config{
 	Name:        "kata-agent",
-	DisplayName: "Kata Agent",
+	DisplayName: "Kata-Agent Service",
 	Description: "",
 }
 
