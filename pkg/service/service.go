@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -34,21 +33,30 @@ import (
 )
 
 
-type Service struct{}
+type Service struct{
+	Logger *logrus.Entry
+}
 
 func (s *Service) Start(srv service.Service) error {
-	log.Println("start kata-agent service")
+	s.Logger.Info("start kata-agent service")
 	go s.run()
 	return nil
 }
 
 func (s *Service) Stop(srv service.Service) error {
-	log.Println("stop kata-agent service")
+	s.Logger.Info("stop kata-agent service")
 	srv.Stop()
 	return nil
 }
 
 func (s *Service) run() {
+	InitLog(LogFileApp, true)
+
+	s.Logger = logrus.WithField("name", AgentName).
+		WithField("pid", os.Getpid()).
+		WithField("source", "agent")
+
+
 	var err error
 
 	// Check if this agent has been run as the init process.
@@ -68,6 +76,7 @@ func (s *Service) run() {
 
 	// Initialize unique sandbox structure.
 	sbox := &sandbox{
+		Logger: s.Logger,
 		containers: make(map[string]*container),
 		running:    false,
 		// pivot_root won't work for initramfs, see
@@ -80,9 +89,9 @@ func (s *Service) run() {
 		stopServer:     make(chan struct{}),
 	}
 
-	logrus.Infof(" s.initLogger()")
+	//WriteLog(" s.initLogger()")
 	if err = sbox.initLogger(); err != nil {
-		logrus.Fatalf("failed to setup logger: %v", err)
+		s.Logger.Fatalf("failed to setup logger: %v", err)
 	}
 
 	//logrus.Infof("setupTracing: %v", AgentName)
@@ -91,7 +100,7 @@ func (s *Service) run() {
 	//	return fmt.Errorf("failed to setup tracing: %v", err)
 	//}
 
-	logrus.Infof("setupDebugConsole: %v", debugConsolePath)
+	s.Logger.Infof("setupDebugConsole: %v", debugConsolePath)
 	if err := setupDebugConsole(rootContext, debugConsolePath); err != nil {
 		AgentLog.WithError(err).Error("failed to setup debug console")
 	}
@@ -100,9 +109,9 @@ func (s *Service) run() {
 	// information.
 	sbox.ctx = rootContext
 
-	logrus.Infof("s.setupSignalHandler()")
+	s.Logger.Infof("s.setupSignalHandler()")
 	if err = sbox.setupSignalHandler(); err != nil {
-		logrus.Fatalf("failed to setup signal handler: %v", err)
+		s.Logger.Fatalf("failed to setup signal handler: %v", err)
 	}
 
 	//if err = s.handleLocalhost(); err != nil {
@@ -111,22 +120,22 @@ func (s *Service) run() {
 
 	// Check for vsock vs serial. This will fill the sandbox structure with
 	// information about the channel.
-	logrus.Infof("s.initChannel()")
+	s.Logger.Infof("s.initChannel()")
 	if err = sbox.initChannel(); err != nil {
-		logrus.Fatalf("failed to setup channels: %v", err)
+		s.Logger.Fatalf("failed to setup channels: %v", err)
 	}
 
-	logrus.Infof("s.startGRPC()")
+	s.Logger.Infof("s.startGRPC()")
 	// Start gRPC server.
 	sbox.startGRPC()
 
-	logrus.Infof("s.waitForStopServer()")
+	s.Logger.Infof("s.waitForStopServer()")
 	go sbox.waitForStopServer()
 
-	logrus.Infof("s.listenToUdevEvents()")
+	s.Logger.Infof("s.listenToUdevEvents()")
 	go sbox.listenToUdevEvents()
 
-	logrus.Infof("s.wg.Wait()")
+	s.Logger.Infof("s.wg.Wait()")
 	sbox.wg.Wait()
 
 	if !tracing {
@@ -142,7 +151,7 @@ func (s *Service) run() {
 	//	stopTracing(rootContext)
 	//}
 
-	logrus.Infof("%v exit", AgentName)
+	s.Logger.Infof("%v exit", AgentName)
 }
 
 const (
@@ -229,6 +238,8 @@ type sandboxStorage struct {
 type sandbox struct {
 	sync.RWMutex
 	ctx context.Context
+
+	Logger *logrus.Entry
 
 	id                string
 	hostname          string
@@ -891,7 +902,7 @@ func (s *sandbox) listenToUdevEvents() {
 
 // This loop is meant to be run inside a separate Go routine.
 func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
-	logrus.Infof("signalHandlerLoop - begin")
+	s.Logger.Infof("signalHandlerLoop - begin")
 	defer logrus.Infof("signalHandlerLoop - end")
 	// Lock OS thread as subreaper is a thread local capability
 	// and is not inherited by children created by fork(2) and clone(2).
@@ -902,7 +913,7 @@ func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
 	//	errCh <- err
 	//	return
 	//}
-	logrus.Infof("close(errCh)")
+	s.Logger.Infof("close(errCh)")
 	close(errCh)
 
 	for sig := range sigCh {
@@ -944,7 +955,7 @@ func (s *sandbox) setupSignalHandler() error {
 	span, _ := s.trace("setupSignalHandler")
 	defer span.Finish()
 
-	logrus.Infof("setupSignalHandler - begin")
+	s.Logger.Infof("setupSignalHandler - begin")
 	defer logrus.Infof("setupSignalHandler - end")
 
 	sigCh := make(chan os.Signal, 512)
@@ -1063,16 +1074,16 @@ func announce() error {
 }
 
 func (s *sandbox) initLogger() error {
-	AgentLog.Logger.Formatter = &logrus.TextFormatter{DisableColors: true, TimestampFormat: time.RFC3339Nano}
+	//AgentLog.Logger.Formatter = &logrus.TextFormatter{DisableColors: true, TimestampFormat: time.RFC3339Nano}
+	//
+	//config := newConfig(defaultLogLevel)
+	////if err := config.getConfig(kernelCmdlineFile); err != nil {
+	////	AgentLog.WithError(err).Warn("Failed to get config from kernel cmdline")
+	////}
+	//
+	//AgentLog.Logger.SetLevel(config.logLevel)
 
-	config := newConfig(defaultLogLevel)
-	//if err := config.getConfig(kernelCmdlineFile); err != nil {
-	//	AgentLog.WithError(err).Warn("Failed to get config from kernel cmdline")
-	//}
-
-	AgentLog.Logger.SetLevel(config.logLevel)
-
-	AgentLog = AgentLog.WithField("debug_console", debugConsole)
+	AgentLog = s.Logger
 
 	return announce()
 }

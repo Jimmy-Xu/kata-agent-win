@@ -12,9 +12,10 @@ RLT=$?
 export END_TS=`date +%s`
 
 if [[ $RLT -eq 0 ]]; then
-  gntp-send.exe -a $gntp_app -s $gntp_server -p $gntp_pwd $gntp_title "$gntp_message ok:) $((END_TS-BEGIN_TS)) √Î"
+  gntp-send.exe -a $gntp_app -s $gntp_server -p $gntp_pwd $gntp_title "$gntp_message ≥…π¶:) $((END_TS-BEGIN_TS)) √Î"
 else
-  gntp-send.exe -a $gntp_app -s $gntp_server -p $gntp_pwd $gntp_title "$gntp_message failed:) $((END_TS-BEGIN_TS)) √Î"
+  gntp-send.exe -a $gntp_app -s $gntp_server -p $gntp_pwd $gntp_title "$gntp_message  ß∞‹:) $((END_TS-BEGIN_TS)) √Î"
+  exit 1
 fi
 
 which upx

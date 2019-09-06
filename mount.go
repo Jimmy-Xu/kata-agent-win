@@ -73,7 +73,7 @@ package main
 //func mount(source, destination, fsType string, flags int, options string) error {
 //	var absSource string
 //
-//	// Log before validation. This is useful to debug cases where the gRPC
+//	// Logger before validation. This is useful to debug cases where the gRPC
 //	// protocol version being used by the client is out-of-sync with the
 //	// agents version. gRPC message members are strictly ordered, so it's
 //	// quite possible that if the protocol changes, the client may

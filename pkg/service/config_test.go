@@ -181,7 +181,7 @@ func TestGetConfig(t *testing.T) {
 	assert.NoError(err, "%v", err)
 
 	assert.True(a.logLevel == logrus.InfoLevel,
-		"Log levels should be identical: got %+v, expecting %+v",
+		"Logger levels should be identical: got %+v, expecting %+v",
 		a.logLevel, logrus.InfoLevel)
 }
 
