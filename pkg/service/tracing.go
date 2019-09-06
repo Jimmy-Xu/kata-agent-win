@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-package main
+package service
 
 import (
 	"context"
@@ -32,11 +32,11 @@ type traceLogger struct {
 var tracerCloser io.Closer
 
 func (t traceLogger) Error(msg string) {
-	agentLog.Error(msg)
+	AgentLog.Error(msg)
 }
 
 func (t traceLogger) Infof(msg string, args ...interface{}) {
-	agentLog.Infof(msg, args...)
+	AgentLog.Infof(msg, args...)
 }
 
 func createTracer(name string) (opentracing.Tracer, error) {
@@ -85,7 +85,7 @@ func createTracer(name string) (opentracing.Tracer, error) {
 func setupTracing(rootSpanName string) (opentracing.Span, context.Context, error) {
 	ctx := context.Background()
 
-	tracer, err := createTracer(agentName)
+	tracer, err := createTracer(AgentName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -97,7 +97,7 @@ func setupTracing(rootSpanName string) (opentracing.Span, context.Context, error
 
 	// See comment in trace().
 	if tracing {
-		agentLog.Debugf("created root span %v", span)
+		AgentLog.Debugf("created root span %v", span)
 	}
 
 	// Associate the root span with the context
@@ -141,7 +141,7 @@ func trace(ctx context.Context, subsystem, name string) (opentracing.Span, conte
 	// are still created - but the tracer used is a NOP. Therefore, only
 	// display the message when tracing is really enabled.
 	if tracing {
-		agentLog.Debugf("created span %v", span)
+		AgentLog.Debugf("created span %v", span)
 	}
 
 	return span, ctx

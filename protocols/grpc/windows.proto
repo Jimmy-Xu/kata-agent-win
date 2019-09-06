@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package grpc;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.equal_all) = true;
+option (gogoproto.populate_all) = true;
+option (gogoproto.testgen_all) = true;
+option (gogoproto.benchgen_all) = true;
+
+//SetUserPassword
+message SetUserPasswordRequest {
+    string username = 1;
+    string password = 2;
+}
+message SetUserPasswordResponse {
+    string error = 1;
+}
+
+//SetComputerName
+message SetComputerNameRequest {
+    string computer_name = 1;
+}
+message SetComputerNameResponse {
+    string error = 1;
+}
+
+//SetNetworkConfigRequest
+message SetNetworkConfigRequest {
+    string mac_address = 1;
+    string ip_address = 2;
+    string mask = 3;
+    string gateway = 4;
+    repeated string dns_server = 5;
+}
+message SetNetworkConfigResponse {
+    string error = 1;
+}
+
+service WindowsService {
+    rpc SetUserPassword (SetUserPasswordRequest) returns (SetUserPasswordResponse);
+    rpc SetComputerName (SetComputerNameRequest) returns (SetComputerNameResponse);
+    rpc SetNetworkConfigRequest (SetNetworkConfigRequest) returns (SetNetworkConfigResponse);
+
+}

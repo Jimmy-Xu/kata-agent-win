@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-package main
+package service
 
 import (
 	"context"
@@ -47,8 +47,8 @@ type channel interface {
 // (channelExistMaxTries * channelExistWaitTime) / 1000 = timeout in seconds
 // If there are neither vsocks nor serial ports, an error is returned.
 func newChannel(ctx context.Context) (channel, error) {
-	span, _ := trace(ctx, "channel", "newChannel")
-	defer span.Finish()
+	//span, _ := trace(ctx, "channel", "newChannel")
+	//defer span.Finish()
 
 	logrus.Infof("newChannel - begin")
 	defer logrus.Infof("newChannel - end")
@@ -92,11 +92,11 @@ func newChannel(ctx context.Context) (channel, error) {
 	}
 
 	if serialErr != nil {
-		agentLog.WithError(serialErr).Error("Serial port not found")
+		AgentLog.WithError(serialErr).Error("Serial port not found")
 	}
 
 	//if vsockErr != nil {
-	//	agentLog.WithError(vsockErr).Error("VSock not found")
+	//	AgentLog.WithError(vsockErr).Error("VSock not found")
 	//}
 
 	return nil, fmt.Errorf("Neither vsocks nor serial ports were found")
@@ -113,7 +113,7 @@ func checkForSerialChannel(ctx context.Context) (*serialChannel, error) {
 	if serialErr == nil {
 		span.SetTag("channel-type", "serial")
 		span.SetTag("serial-path", serialPath)
-		agentLog.Debug("Serial channel type detected")
+		AgentLog.Debug("Serial channel type detected")
 		return &serialChannel{serialPath: serialPath}, nil
 	} else {
 		logrus.Errorf("serialPath:%v, serialErr:%v", serialPath, serialErr)
@@ -134,7 +134,7 @@ func checkForSerialChannel(ctx context.Context) (*serialChannel, error) {
 //	vSockSupported, vsockErr := isAFVSockSupportedFunc()
 //	if vSockSupported && vsockErr == nil {
 //		span.SetTag("channel-type", "vsock")
-//		agentLog.Debug("Vsock channel type detected")
+//		AgentLog.Debug("Vsock channel type detected")
 //		return &vSockChannel{}, nil
 //	}
 //
@@ -237,7 +237,7 @@ func (c *serialChannel) wait() error {
 	//	for i := 0; i < nev; i++ {
 	//		ev := events[i]
 	//		if ev.Fd == int32(fd) {
-	//			agentLog.WithField("events", ev.Events).Debug("New serial channel event")
+	//			AgentLog.WithField("events", ev.Events).Debug("New serial channel event")
 	//			if ev.Events&unix.EPOLLOUT != 0 {
 	//				return nil
 	//			}
@@ -268,7 +268,7 @@ func (yw yamuxWriter) Write(bytes []byte) (int, error) {
 	l := len(message)
 
 	// yamux messages are all warnings and errors
-	agentLog.WithField("component", "yamux").Warn(message)
+	AgentLog.WithField("component", "yamux").Warn(message)
 
 	return l, nil
 }
@@ -379,7 +379,7 @@ func findVirtualSerialPath(serialName string) (string, error) {
 	//	content, err := ioutil.ReadFile(path)
 	//	if err != nil {
 	//		if os.IsNotExist(err) {
-	//			agentLog.WithField("file", path).Debug("Skip parsing of non-existent file")
+	//			AgentLog.WithField("file", path).Debug("Skip parsing of non-existent file")
 	//			continue
 	//		}
 	//		return "", err

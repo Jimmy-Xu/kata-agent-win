@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-package main
+package service
 
 import (
 	"bytes"
@@ -103,19 +103,19 @@ func TestSignalBacktrace(t *testing.T) {
 	// create buffer to save logger output
 	buf := &bytes.Buffer{}
 
-	savedLog := agentLog
+	savedLog := AgentLog
 	defer func() {
-		agentLog = savedLog
+		AgentLog = savedLog
 	}()
 
-	agentLog = logrus.WithField("test-agent-logger", true)
+	AgentLog = logrus.WithField("test-agent-logger", true)
 
-	agentLog.Logger.Formatter = &logrus.TextFormatter{
+	AgentLog.Logger.Formatter = &logrus.TextFormatter{
 		DisableColors: true,
 	}
 
 	// capture output to buffer
-	agentLog.Logger.Out = buf
+	AgentLog.Logger.Out = buf
 
 	// determine name of *this* function
 	pc := make([]uintptr, 1)

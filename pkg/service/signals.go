@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-package main
+package service
 
 import (
 	"bytes"
@@ -31,12 +31,12 @@ var handledSignalsMap = map[syscall.Signal]bool{
 	//syscall.SIGUSR1:   false,
 }
 
-func handlePanic() {
+func HandlePanic() {
 	r := recover()
 
 	if r != nil {
 		msg := fmt.Sprintf("%s", r)
-		agentLog.WithField("panic", msg).Error("fatal error")
+		AgentLog.WithField("panic", msg).Error("fatal error")
 
 		die(rootContext)
 	}
@@ -54,7 +54,7 @@ func backtrace() {
 	}
 
 	for _, line := range strings.Split(buf.String(), "\n") {
-		agentLog.Error(line)
+		AgentLog.Error(line)
 	}
 }
 

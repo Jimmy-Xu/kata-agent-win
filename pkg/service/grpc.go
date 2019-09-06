@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-package main
+package service
 
 import (
 	"bufio"
@@ -80,7 +80,7 @@ const cpusetMode = 0644
 // handleError will log the specified error if wait is false
 func handleError(wait bool, err error) error {
 	if !wait {
-		agentLog.WithError(err).Error()
+		AgentLog.WithError(err).Error()
 	}
 
 	return err
@@ -115,7 +115,7 @@ func onlineResources(resource onlineResource, nbResources int32) (uint32, error)
 
 		if strings.Trim(string(status), "\n\t ") == "0" {
 			if err := ioutil.WriteFile(onlinePath, []byte("1"), 0600); err != nil {
-				agentLog.WithField("online-path", onlinePath).WithError(err).Errorf("Could not online resource")
+				AgentLog.WithField("online-path", onlinePath).WithError(err).Errorf("Could not online resource")
 				continue
 			}
 			count++
@@ -170,10 +170,10 @@ func updateCpusetPath(cgroupPath string, newCpuset string, cookies cookie) error
 	//Start to update from cgroup system root.
 	cgroupParentPath := cgroupCpusetPath
 
-	cpusetGuest, err := getCpusetGuest()
-	if err != nil {
-		return err
-	}
+	//cpusetGuest, err := getCpusetGuest()
+	//if err != nil {
+	//	return err
+	//}
 
 	// Update parents with max set of current cpus
 	//Iterate  all parent dirs in order.
@@ -190,17 +190,17 @@ func updateCpusetPath(cgroupPath string, newCpuset string, cookies cookie) error
 
 		// check if the cgroup was already updated.
 		if cookies[cgroupParentPath] {
-			agentLog.WithField("path", cgroupParentPath).Debug("cpuset cgroup already updated")
+			AgentLog.WithField("path", cgroupParentPath).Debug("cpuset cgroup already updated")
 			continue
 		}
 
 		cpusetCpusParentPath := filepath.Join(cgroupParentPath, "cpuset.cpus")
 
-		agentLog.WithField("path", cpusetCpusParentPath).Debug("updating cpuset parent cgroup")
+		AgentLog.WithField("path", cpusetCpusParentPath).Debug("updating cpuset parent cgroup")
 
-		if err := ioutil.WriteFile(cpusetCpusParentPath, []byte(cpusetGuest), cpusetMode); err != nil {
-			return fmt.Errorf("Could not update parent cpuset cgroup (%s) cpuset:'%s': %v", cpusetCpusParentPath, cpusetGuest, err)
-		}
+		//if err := ioutil.WriteFile(cpusetCpusParentPath, []byte(cpusetGuest), cpusetMode); err != nil {
+		//	return fmt.Errorf("Could not update parent cpuset cgroup (%s) cpuset:'%s': %v", cpusetCpusParentPath, cpusetGuest, err)
+		//}
 
 		// add cgroup path to the cookies.
 		cookies[cgroupParentPath] = true
@@ -209,11 +209,11 @@ func updateCpusetPath(cgroupPath string, newCpuset string, cookies cookie) error
 	// Finally update group path with requested value.
 	cpusetCpusPath := filepath.Join(cgroupCpusetPath, cgroupPath, "cpuset.cpus")
 
-	agentLog.WithField("path", cpusetCpusPath).Debug("updating cpuset cgroup")
+	AgentLog.WithField("path", cpusetCpusPath).Debug("updating cpuset cgroup")
 
-	if err := ioutil.WriteFile(cpusetCpusPath, []byte(newCpuset), cpusetMode); err != nil {
-		return fmt.Errorf("Could not update parent cpuset cgroup (%s) cpuset:'%s': %v", cpusetCpusPath, cpusetGuest, err)
-	}
+	//if err := ioutil.WriteFile(cpusetCpusPath, []byte(newCpuset), cpusetMode); err != nil {
+	//	return fmt.Errorf("Could not update parent cpuset cgroup (%s) cpuset:'%s': %v", cpusetCpusPath, cpusetGuest, err)
+	//}
 
 	return nil
 }
@@ -228,7 +228,7 @@ func (a *agentGRPC) onlineCPUMem(req *pb.OnlineCPUMemRequest) error {
 	defer a.sandbox.Unlock()
 
 	if req.NbCpus > 0 {
-		agentLog.WithField("vcpus-to-connect", req.NbCpus).Debug("connecting vCPUs")
+		AgentLog.WithField("vcpus-to-connect", req.NbCpus).Debug("connecting vCPUs")
 		if err := onlineCPUResources(req.NbCpus); err != nil {
 			return handleError(req.Wait, err)
 		}
@@ -242,11 +242,11 @@ func (a *agentGRPC) onlineCPUMem(req *pb.OnlineCPUMemRequest) error {
 
 	// At this point all CPUs have been connected, we need to know
 	// the actual range of CPUs
-	connectedCpus, err := getCpusetGuest()
-	if err != nil {
-		return handleError(req.Wait, fmt.Errorf("Could not get the actual range of connected CPUs: %v", err))
-	}
-	agentLog.WithField("range-of-vcpus", connectedCpus).Debug("connecting vCPUs")
+	//connectedCpus, err := getCpusetGuest()
+	//if err != nil {
+	//	return handleError(req.Wait, fmt.Errorf("Could not get the actual range of connected CPUs: %v", err))
+	//}
+	//AgentLog.WithField("range-of-vcpus", connectedCpus).Debug("connecting vCPUs")
 
 	//cookies := make(cookie)
 
@@ -254,7 +254,7 @@ func (a *agentGRPC) onlineCPUMem(req *pb.OnlineCPUMemRequest) error {
 	// all containers an update each cpuset cgroup. This is not required in docker
 	// containers since they don't hot add/remove CPUs.
 	//for _, c := range a.sandbox.containers {
-	//	agentLog.WithField("container", c.container.ID()).Debug("updating cpuset cgroup")
+	//	AgentLog.WithField("container", c.container.ID()).Debug("updating cpuset cgroup")
 	//	contConfig := c.container.Config()
 	//	cgroupPath := contConfig.Cgroups.Path
 	//
@@ -267,7 +267,7 @@ func (a *agentGRPC) onlineCPUMem(req *pb.OnlineCPUMemRequest) error {
 	//
 	//	// cpuset assinged containers are not updated, only we update its parents.
 	//	if contConfig.Cgroups.Resources.CpusetCpus != "" {
-	//		agentLog.WithField("cpuset", contConfig.Cgroups.Resources.CpusetCpus).Debug("updating container cpuset cgroup parents")
+	//		AgentLog.WithField("cpuset", contConfig.Cgroups.Resources.CpusetCpus).Debug("updating container cpuset cgroup parents")
 	//		// remove container cgroup directory
 	//		cgroupPath = filepath.Dir(cgroupPath)
 	//	}
@@ -570,9 +570,9 @@ func (a *agentGRPC) rollbackFailingContainerCreation(ctr *container) {
 
 	a.sandbox.deleteContainer(ctr.id)
 
-	if err := removeMounts(ctr.mounts); err != nil {
-		agentLog.WithError(err).Error("rollback failed removeMounts()")
-	}
+	//if err := removeMounts(ctr.mounts); err != nil {
+	//	AgentLog.WithError(err).Error("rollback failed removeMounts()")
+	//}
 }
 
 //func (a *agentGRPC) finishCreateContainer(ctr *container, req *pb.CreateContainerRequest, config *configs.Config) (resp *gpb.Empty, err error) {
@@ -611,37 +611,37 @@ func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainer
 		return emptyResp, err
 	}
 
-	// re-scan PCI bus
-	// looking for hidden devices
-	if err = rescanPciBus(); err != nil {
-		agentLog.WithError(err).Warn("Could not rescan PCI bus")
-	}
-
-	// Some devices need some extra processing (the ones invoked with
-	// --device for instance), and that's what this call is doing. It
-	// updates the devices listed in the OCI spec, so that they actually
-	// match real devices inside the VM. This step is necessary since we
-	// cannot predict everything from the caller.
-	if err = addDevices(ctx, req.Devices, req.OCI, a.sandbox); err != nil {
-		return emptyResp, err
-	}
-
-	// Both rootfs and volumes (invoked with --volume for instance) will
-	// be processed the same way. The idea is to always mount any provided
-	// storage to the specified MountPoint, so that it will match what's
-	// inside oci.Mounts.
-	// After all those storages have been processed, no matter the order
-	// here, the agent will rely on libcontainer (using the oci.Mounts
-	// list) to bind mount all of them inside the container.
-	mountList, err := addStorages(ctx, req.Storages, a.sandbox)
-	if err != nil {
-		return emptyResp, err
-	}
+	//// re-scan PCI bus
+	//// looking for hidden devices
+	//if err = rescanPciBus(); err != nil {
+	//	AgentLog.WithError(err).Warn("Could not rescan PCI bus")
+	//}
+	//
+	//// Some devices need some extra processing (the ones invoked with
+	//// --device for instance), and that's what this call is doing. It
+	//// updates the devices listed in the OCI spec, so that they actually
+	//// match real devices inside the VM. This step is necessary since we
+	//// cannot predict everything from the caller.
+	//if err = addDevices(ctx, req.Devices, req.OCI, a.sandbox); err != nil {
+	//	return emptyResp, err
+	//}
+	//
+	//// Both rootfs and volumes (invoked with --volume for instance) will
+	//// be processed the same way. The idea is to always mount any provided
+	//// storage to the specified MountPoint, so that it will match what's
+	//// inside oci.Mounts.
+	//// After all those storages have been processed, no matter the order
+	//// here, the agent will rely on libcontainer (using the oci.Mounts
+	//// list) to bind mount all of them inside the container.
+	//mountList, err := addStorages(ctx, req.Storages, a.sandbox)
+	//if err != nil {
+	//	return emptyResp, err
+	//}
 
 	ctr := &container{
 		id:              req.ContainerId,
 		processes:       make(map[string]*process),
-		mounts:          mountList,
+		//mounts:          mountList,
 		useSandboxPidNs: req.SandboxPidns,
 		ctx:             ctx,
 	}
@@ -673,18 +673,18 @@ func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainer
 		a.sandbox.addGuestHooks(ociSpec)
 
 		// write the OCI spec to a file so that hooks can read it
-		err = writeSpecToFile(ociSpec)
-		if err != nil {
-			return emptyResp, err
-		}
+		//err = writeSpecToFile(ociSpec)
+		//if err != nil {
+		//	return emptyResp, err
+		//}
 
 		// Change cwd because libcontainer assumes the bundle path is the cwd:
 		// https://github.com/opencontainers/runc/blob/v1.0.0-rc5/libcontainer/specconv/spec_linux.go#L157
-		oldcwd, err := changeToBundlePath(ociSpec)
-		if err != nil {
-			return emptyResp, err
-		}
-		defer os.Chdir(oldcwd)
+		//oldcwd, err := changeToBundlePath(ociSpec)
+		//if err != nil {
+		//	return emptyResp, err
+		//}
+		//defer os.Chdir(oldcwd)
 	}
 
 	//// Convert the OCI specification into a libcontainer configuration.
@@ -748,14 +748,14 @@ func (a *agentGRPC) applyNetworkSysctls(ociSpec *specs.Spec) error {
 }
 
 func (a *agentGRPC) handleCPUSet(ociSpec *specs.Spec) error {
-	if ociSpec.Linux.Resources.CPU != nil && ociSpec.Linux.Resources.CPU.Cpus != "" {
-		availableCpuset, err := getAvailableCpusetList(ociSpec.Linux.Resources.CPU.Cpus)
-		if err != nil {
-			return err
-		}
-
-		ociSpec.Linux.Resources.CPU.Cpus = availableCpuset
-	}
+	//if ociSpec.Linux.Resources.CPU != nil && ociSpec.Linux.Resources.CPU.Cpus != "" {
+	//	availableCpuset, err := getAvailableCpusetList(ociSpec.Linux.Resources.CPU.Cpus)
+	//	if err != nil {
+	//		return err
+	//	}
+	//
+	//	ociSpec.Linux.Resources.CPU.Cpus = availableCpuset
+	//}
 	return nil
 }
 
@@ -784,7 +784,7 @@ func (a *agentGRPC) handleCPUSet(ociSpec *specs.Spec) error {
 //	for _, l := range posixRlimits {
 //		limit, ok := rlimitsMap[l.Type]
 //		if !ok {
-//			agentLog.WithField("rlimit", l.Type).Warnf("Unknown rlimit")
+//			AgentLog.WithField("rlimit", l.Type).Warnf("Unknown rlimit")
 //			continue
 //		}
 //
@@ -911,7 +911,7 @@ func (a *agentGRPC) SignalProcess(ctx context.Context, req *pb.SignalProcessRequ
 	//signal := syscall.Signal(req.Signal)
 	//
 	//if status == libcontainer.Stopped {
-	//	agentLog.WithFields(logrus.Fields{
+	//	AgentLog.WithFields(logrus.Fields{
 	//		"containerID": req.ContainerId,
 	//		"signal":      signal.String(),
 	//	}).Info("discarding signal as container stopped")
@@ -958,7 +958,7 @@ func isSignalHandled(pid int, signum syscall.Signal) bool {
 	procFile := fmt.Sprintf("/proc/%d/status", pid)
 	file, err := os.Open(procFile)
 	if err != nil {
-		agentLog.WithField("procFile", procFile).Warn("Open proc file failed")
+		AgentLog.WithField("procFile", procFile).Warn("Open proc file failed")
 		return false
 	}
 	defer file.Close()
@@ -969,13 +969,13 @@ func isSignalHandled(pid int, signum syscall.Signal) bool {
 		if strings.HasPrefix(line, "SigCgt:") {
 			maskSlice := strings.Split(line, ":")
 			if len(maskSlice) != 2 {
-				agentLog.WithField("procFile", procFile).Warn("Parse the SigCgt field failed")
+				AgentLog.WithField("procFile", procFile).Warn("Parse the SigCgt field failed")
 				return false
 			}
 			sigCgtStr := strings.TrimSpace(maskSlice[1])
 			sigCgtMask, err := strconv.ParseUint(sigCgtStr, 16, 64)
 			if err != nil {
-				agentLog.WithField("sigCgt", sigCgtStr).Warn("parse the SigCgt to hex failed")
+				AgentLog.WithField("sigCgt", sigCgtStr).Warn("parse the SigCgt to hex failed")
 				return false
 			}
 			return (sigCgtMask & sigMask) == sigMask
@@ -1162,7 +1162,7 @@ func (a *agentGRPC) UpdateContainer(ctx context.Context, req *pb.UpdateContainer
 	//
 	//	cookies := make(cookie)
 	//	if err = updateCpusetPath(contConfig.Cgroups.Path, resources.CpusetCpus, cookies); err != nil {
-	//		agentLog.WithError(err).Warn("Could not update container cpuset cgroup")
+	//		AgentLog.WithError(err).Warn("Could not update container cpuset cgroup")
 	//	}
 	//}
 	//
@@ -1432,7 +1432,7 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 
 	if req.SandboxId != "" {
 		a.sandbox.id = req.SandboxId
-		agentLog = agentLog.WithField("sandbox", a.sandbox.id)
+		AgentLog = AgentLog.WithField("sandbox", a.sandbox.id)
 	}
 
 	// Set up shared UTS and IPC namespaces
@@ -1446,12 +1446,12 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 		}
 	}
 
-	mountList, err := addStorages(ctx, req.Storages, a.sandbox)
-	if err != nil {
-		return emptyResp, err
-	}
+	//mountList, err := addStorages(ctx, req.Storages, a.sandbox)
+	//if err != nil {
+	//	return emptyResp, err
+	//}
 
-	a.sandbox.mounts = mountList
+	//a.sandbox.mounts = mountList
 
 	//if err := setupDNS(a.sandbox.network.dns); err != nil {
 	//	return emptyResp, err
@@ -1462,7 +1462,7 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 
 func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRequest) (*gpb.Empty, error) {
 	if !a.sandbox.running {
-		agentLog.Info("Sandbox not started, this is a no-op")
+		AgentLog.Info("Sandbox not started, this is a no-op")
 		return emptyResp, nil
 	}
 
@@ -1489,9 +1489,9 @@ func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRe
 	//	return emptyResp, err
 	//}
 
-	if err := removeMounts(a.sandbox.mounts); err != nil {
-		return emptyResp, err
-	}
+	//if err := removeMounts(a.sandbox.mounts); err != nil {
+	//	return emptyResp, err
+	//}
 
 	if err := a.sandbox.teardownSharedPidNs(); err != nil {
 		return emptyResp, err
@@ -1563,7 +1563,7 @@ func (a *agentGRPC) GetGuestDetails(ctx context.Context, req *pb.GuestDetailsReq
 		data, err := ioutil.ReadFile(sysfsMemoryBlockSizePath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				agentLog.WithField("sysfsMemoryBlockSizePath", sysfsMemoryBlockSizePath).Info("Guest kernel config doesn't support memory hotplug")
+				AgentLog.WithField("sysfsMemoryBlockSizePath", sysfsMemoryBlockSizePath).Info("Guest kernel config doesn't support memory hotplug")
 			} else {
 				return nil, err
 			}
@@ -1618,13 +1618,13 @@ func (a *agentGRPC) getAgentDetails(ctx context.Context) *pb.AgentDetails {
 		SupportsSeccomp: a.haveSeccomp(),
 	}
 
-	for handler := range deviceHandlerList {
-		details.DeviceHandlers = append(details.DeviceHandlers, handler)
-	}
-
-	for handler := range storageHandlerList {
-		details.StorageHandlers = append(details.StorageHandlers, handler)
-	}
+	//for handler := range deviceHandlerList {
+	//	details.DeviceHandlers = append(details.DeviceHandlers, handler)
+	//}
+	//
+	//for handler := range storageHandlerList {
+	//	details.StorageHandlers = append(details.StorageHandlers, handler)
+	//}
 
 	return &details
 }
@@ -1678,7 +1678,7 @@ func (a *agentGRPC) CopyFile(ctx context.Context, req *pb.CopyFileRequest) (*gpb
 		return emptyResp, err
 	}
 
-	agentLog.WithFields(logrus.Fields{
+	AgentLog.WithFields(logrus.Fields{
 		"tmp-file-size": st.Size(),
 		"expected-size": req.FileSize,
 	}).Debugf("Checking temporary file size")
@@ -1699,7 +1699,7 @@ func (a *agentGRPC) CopyFile(ctx context.Context, req *pb.CopyFileRequest) (*gpb
 
 	// At this point temoporary file has the expected size, atomically move it overwriting
 	// the destination.
-	agentLog.WithFields(logrus.Fields{
+	AgentLog.WithFields(logrus.Fields{
 		"tmp-path": tmpPath,
 		"des-path": path,
 	}).Debugf("Moving temporary file")
@@ -1728,7 +1728,7 @@ func (a *agentGRPC) StartTracing(ctx context.Context, req *pb.StartTracingReques
 	// Ignore the provided context and recreate the root context.
 	// Note that this call will not be traced, but all subsequent ones
 	// will be.
-	rootSpan, rootContext, err = setupTracing(agentName)
+	rootSpan, rootContext, err = setupTracing(AgentName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup tracing: %v", err)
 	}

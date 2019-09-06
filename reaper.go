@@ -14,10 +14,12 @@ import (
 	"os/exec"
 	"sync"
 
-	//"github.com/opencontainers/runc/libcontainer"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
+	//"github.com/opencontainers/runc/libcontainer"
+
+	kataService "github.com/kata-containers/agent/pkg/service"
 )
 
 type reaper interface {
@@ -147,7 +149,7 @@ func (r *agentReaper) reap() error {
 		//
 		//status := exitStatus(ws)
 
-		agentLog.WithFields(logrus.Fields{
+		kataService.AgentLog.WithFields(logrus.Fields{
 			//"pid":    pid,
 			//"status": status,
 		}).Debug("process exited")

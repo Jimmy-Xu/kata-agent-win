@@ -9,6 +9,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	kataService "github.com/kata-containers/agent/pkg/service"
 	"io/ioutil"
 	"os"
 	"path"
@@ -85,18 +86,18 @@ func findHooks(guestHookPath, hookType string) (hooksFound []specs.Hook) {
 
 	files, err := ioutil.ReadDir(hooksPath)
 	if err != nil {
-		agentLog.WithError(err).WithField("oci-hook-type", hookType).Info("Skipping hook type")
+		kataService.AgentLog.WithError(err).WithField("oci-hook-type", hookType).Info("Skipping hook type")
 		return
 	}
 
 	for _, file := range files {
 		name := file.Name()
 		if ok, err := isValidHook(file); !ok {
-			agentLog.WithError(err).WithField("oci-hook-name", name).Warn("Skipping hook")
+			kataService.AgentLog.WithError(err).WithField("oci-hook-name", name).Warn("Skipping hook")
 			continue
 		}
 
-		agentLog.WithFields(logrus.Fields{
+		kataService.AgentLog.WithFields(logrus.Fields{
 			"oci-hook-name": name,
 			"oci-hook-type": hookType,
 		}).Info("Adding hook")
@@ -106,7 +107,7 @@ func findHooks(guestHookPath, hookType string) (hooksFound []specs.Hook) {
 		})
 	}
 
-	agentLog.WithField("oci-hook-type", hookType).Infof("Added %d hooks", len(hooksFound))
+	kataService.AgentLog.WithField("oci-hook-type", hookType).Infof("Added %d hooks", len(hooksFound))
 
 	return
 }

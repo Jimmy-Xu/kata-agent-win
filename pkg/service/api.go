@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-package main
+package service
 
 import (
 	"github.com/sirupsen/logrus"
@@ -35,7 +35,7 @@ const (
 
 // Global
 const (
-	agentName       = "kata-agent"
+	AgentName       = "kata-agent"
 	defaultLogLevel = logrus.InfoLevel
 	selfBinPath     = "/proc/self/exe"
 )

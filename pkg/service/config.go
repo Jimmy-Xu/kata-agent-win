@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-package main
+package service
 
 import (
 	"io/ioutil"
@@ -55,7 +55,7 @@ func (c *agentConfig) getConfig(cmdLineFile string) error {
 	words := strings.Fields(string(kernelCmdline))
 	for _, word := range words {
 		if err := c.parseCmdlineOption(word); err != nil {
-			agentLog.WithFields(logrus.Fields{
+			AgentLog.WithFields(logrus.Fields{
 				"error":  err,
 				"option": word,
 			}).Warn("Failed to parse kernel option")
@@ -120,10 +120,10 @@ func (c *agentConfig) parseCmdlineOption(option string) error {
 			return err
 		}
 		if flag {
-			agentLog.Debug("Param passed to use vsock channel")
+			AgentLog.Debug("Param passed to use vsock channel")
 			commCh = vsockCh
 		} else {
-			agentLog.Debug("Param passed to NOT use vsock channel")
+			AgentLog.Debug("Param passed to NOT use vsock channel")
 			commCh = serialCh
 		}
 	default:
@@ -144,7 +144,7 @@ func enableTracing(traceMode, traceType string) {
 
 	collatedTrace = traceType == traceTypeCollated
 
-	agentLog.WithFields(logrus.Fields{
+	AgentLog.WithFields(logrus.Fields{
 		"trace-mode": traceMode,
 		"trace-type": traceType,
 	}).Info("enabled tracing")
