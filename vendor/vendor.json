@@ -1,0 +1,96 @@
+{
+	"comment": "",
+	"ignore": "",
+	"package": [
+		{
+			"checksumSHA1": "3KhDEC5MM0iyN+FsLfxpnvFVeuY=",
+			"origin": "github.com/kata-containers/agent/vendor/github.com/davecgh/go-spew/spew",
+			"path": "github.com/davecgh/go-spew/spew",
+			"revision": "d8f796af33cc11cb798c1aaeb27a4ebc5099927d",
+			"revisionTime": "2018-08-30T19:11:22Z"
+		},
+		{
+			"checksumSHA1": "p8xeMnLLPK0z+mzxpoT893bl7gI=",
+			"origin": "github.com/kata-containers/agent/vendor/github.com/golang/protobuf/proto",
+			"path": "github.com/golang/protobuf/proto",
+			"revision": "822fe56949f5d56c9e2f02367c657e0e9b4d27d1",
+			"revisionTime": "2019-08-27T17:58:35Z"
+		},
+		{
+			"checksumSHA1": "b8ppg48t0Xs5TgRmCpi1nyQ06Ic=",
+			"path": "github.com/kardianos/service",
+			"revision": "fffe6c52ed0fd8653543bbe72432dbf6ea02f300",
+			"revisionTime": "2019-05-14T15:51:56Z"
+		},
+		{
+			"checksumSHA1": "AM7xuftGqB7Tyqg9HdiEAHrFj/k=",
+			"path": "github.com/lestrrat-go/file-rotatelogs",
+			"revision": "cf4bc193a5a5685cfc62f3e75b0376b45a40116e",
+			"revisionTime": "2019-06-04T01:12:45Z"
+		},
+		{
+			"checksumSHA1": "kCiYjWVsI7JrUA9SogAebi2cp00=",
+			"path": "github.com/lestrrat-go/file-rotatelogs/internal/option",
+			"revision": "cf4bc193a5a5685cfc62f3e75b0376b45a40116e",
+			"revisionTime": "2019-06-04T01:12:45Z"
+		},
+		{
+			"checksumSHA1": "DbYcNjrmXgP2grlB1bIkwA9V4To=",
+			"path": "github.com/lestrrat-go/strftime",
+			"revision": "8b31f9c59b0feb56c456ce49a7b3d2b2e93a6f18",
+			"revisionTime": "2018-08-21T11:37:35Z"
+		},
+		{
+			"checksumSHA1": "W5XFRMopUjaPHf7px4zRCV2n3iE=",
+			"origin": "github.com/kata-containers/agent/vendor/github.com/pkg/errors",
+			"path": "github.com/pkg/errors",
+			"revision": "27936f6d90f9c8e1145f11ed52ffffbfdb9e0af7",
+			"revisionTime": "2019-02-27T00:00:51Z"
+		},
+		{
+			"checksumSHA1": "OHK0GAgeySXMMiqH/84b80WoPNU=",
+			"origin": "github.com/kata-containers/agent/vendor/github.com/stretchr/testify/assert",
+			"path": "github.com/stretchr/testify/assert",
+			"revision": "221dbe5ed46703ee255b1da0dec05086f5035f62",
+			"revisionTime": "2019-05-17T17:51:56Z"
+		},
+		{
+			"checksumSHA1": "XCqCv0bHN8LsQGuseU51pfzOb8I=",
+			"origin": "github.com/kata-containers/agent/vendor/golang.org/x/sys/windows",
+			"path": "golang.org/x/sys/windows",
+			"revision": "c46e0d965b18999e384fd423fcf839b4e68f76dc",
+			"revisionTime": "2019-05-13T11:22:04Z"
+		},
+		{
+			"checksumSHA1": "K0BwAd1EC/uJa03UkWZUA4uCu+w=",
+			"path": "golang.org/x/sys/windows/registry",
+			"revision": "c46e0d965b18999e384fd423fcf839b4e68f76dc",
+			"revisionTime": "2019-05-13T11:22:04Z"
+		},
+		{
+			"checksumSHA1": "gu8MynyQ/EpOmsF37j2zTJ9aUFY=",
+			"path": "golang.org/x/sys/windows/svc",
+			"revision": "c46e0d965b18999e384fd423fcf839b4e68f76dc",
+			"revisionTime": "2019-05-13T11:22:04Z"
+		},
+		{
+			"checksumSHA1": "dz53pQfqAnXG8HdJj+nazXN9YRw=",
+			"path": "golang.org/x/sys/windows/svc/eventlog",
+			"revision": "c46e0d965b18999e384fd423fcf839b4e68f76dc",
+			"revisionTime": "2019-05-13T11:22:04Z"
+		},
+		{
+			"checksumSHA1": "LyVWTG4Ut6E3DFhBAuvBGM5x31Q=",
+			"path": "golang.org/x/sys/windows/svc/mgr",
+			"revision": "c46e0d965b18999e384fd423fcf839b4e68f76dc",
+			"revisionTime": "2019-05-13T11:22:04Z"
+		},
+		{
+			"checksumSHA1": "xldGnHk44I4mgAwYKfsu7TqBPqM=",
+			"path": "gopkg.in/yaml.v2",
+			"revision": "51d6538a90f86fe93ac480b35f37b2be17fef232",
+			"revisionTime": "2018-11-15T11:05:04Z"
+		}
+	],
+	"rootPath": "github.com/kata-containers/agent"
+}
