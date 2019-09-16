@@ -697,7 +697,7 @@ func TestSingleWaitProcess(t *testing.T) {
 	assert.Error(err)
 
 	a.sandbox.containers[containerID].processes[containerID] = &process{
-		id:         containerID,
+		id: containerID,
 		//process:    libcontainer.Process{},
 		exitCodeCh: make(chan int, 1),
 	}
@@ -736,7 +736,7 @@ func TestMultiWaitProcess(t *testing.T) {
 	}
 
 	a.sandbox.containers[containerID].processes[containerID] = &process{
-		id:         containerID,
+		id: containerID,
 		//process:    libcontainer.Process{},
 		exitCodeCh: make(chan int, 1),
 	}
@@ -1681,7 +1681,7 @@ func TestUpdateSharedPidNs(t *testing.T) {
 		//	processes: []int{1},
 		//},
 		initProcess: &process{
-			id:      "1",
+			id: "1",
 			//process: libcontainer.Process{},
 		},
 	}

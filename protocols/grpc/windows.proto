@@ -1,46 +1,92 @@
 syntax = "proto3";
 
+//generate: protoc --go_out=plugins=grpc:. windows.proto
+
 package grpc;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-option (gogoproto.equal_all) = true;
-option (gogoproto.populate_all) = true;
-option (gogoproto.testgen_all) = true;
-option (gogoproto.benchgen_all) = true;
+message GetUsersRequest {
+}
+message GetUsersResponse {
+    string error = 1;
+    repeated string username = 2;
+}
+
+message GetHostnameRequest {
+}
+message GetHostnameResponse {
+    string error = 1;
+    string hostname = 2;
+    string computer_name = 3;
+}
+
+message Addrs {
+    string ip_address = 1;
+    string subnet = 2;
+}
+message GetNetworkConfigRequest {
+    string mac_address = 1;
+}
+message GetNetworkConfigResponse {
+    string error = 1;
+    string mac_address = 2;
+    repeated Addrs addrs = 3;
+    string gateway = 4;
+    repeated string dns_server = 5;
+}
+
+message GetKMSRequest {
+}
+message GetKMSResponse {
+    string error = 1;
+    string server = 2;
+}
 
 //SetUserPassword
 message SetUserPasswordRequest {
     string username = 1;
     string password = 2;
+    string expired_timestamp = 3;
 }
 message SetUserPasswordResponse {
     string error = 1;
 }
 
-//SetComputerName
-message SetComputerNameRequest {
-    string computer_name = 1;
+//SetHostname
+message SetHostnameRequest {
+    string hostname = 1;
 }
-message SetComputerNameResponse {
+message SetHostnameResponse {
     string error = 1;
 }
 
 //SetNetworkConfigRequest
 message SetNetworkConfigRequest {
     string mac_address = 1;
-    string ip_address = 2;
-    string mask = 3;
-    string gateway = 4;
-    repeated string dns_server = 5;
+    repeated Addrs addrs = 2;
+    string gateway = 3;
+    repeated string dns_server = 4;
 }
 message SetNetworkConfigResponse {
     string error = 1;
 }
 
-service WindowsService {
-    rpc SetUserPassword (SetUserPasswordRequest) returns (SetUserPasswordResponse);
-    rpc SetComputerName (SetComputerNameRequest) returns (SetComputerNameResponse);
-    rpc SetNetworkConfigRequest (SetNetworkConfigRequest) returns (SetNetworkConfigResponse);
+//SetKMS
+message SetKMSRequest {
+    string server = 1;
+}
+message SetKMSResponse {
+    string error = 1;
+}
 
+service WindowsService {
+    rpc GetUsers (GetUsersRequest) returns (GetUsersResponse);
+    rpc GetHostname (GetHostnameRequest) returns (GetHostnameResponse);
+    rpc GetNetworkConfig (GetNetworkConfigRequest) returns (GetNetworkConfigResponse);
+    rpc GetKMS (GetKMSRequest) returns (GetKMSResponse);
+
+    rpc SetUserPassword (SetUserPasswordRequest) returns (SetUserPasswordResponse);
+    rpc SetHostname (SetHostnameRequest) returns (SetHostnameResponse);
+    rpc SetNetworkConfig (SetNetworkConfigRequest) returns (SetNetworkConfigResponse);
+    rpc SetKMS (SetKMSRequest) returns (SetKMSResponse);
 }

@@ -66,7 +66,7 @@ func newChannel(ctx context.Context) (channel, error) {
 			if ch, serialErr = checkForSerialChannel(ctx); serialErr == nil && ch.(*serialChannel) != nil {
 				return ch, nil
 			} else {
-				if strings.Contains(serialErr.Error(),"Access is denied") {
+				if strings.Contains(serialErr.Error(), "Access is denied") {
 					logrus.Fatalf("ch:%v err:%v", ch, serialErr)
 				} else {
 					logrus.Warnf("ch:%v err:%v", ch, serialErr)
@@ -159,7 +159,7 @@ func (c *vSockChannel) listen() (net.Listener, error) {
 	//}
 
 	//return l, nil
-	return nil,nil
+	return nil, nil
 }
 
 func (c *vSockChannel) teardown() error {

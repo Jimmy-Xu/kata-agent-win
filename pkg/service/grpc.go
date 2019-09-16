@@ -8,6 +8,8 @@ package service
 
 import (
 	"bufio"
+	"golang.org/x/sys/windows"
+	"net"
 	//"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -639,8 +641,8 @@ func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainer
 	//}
 
 	ctr := &container{
-		id:              req.ContainerId,
-		processes:       make(map[string]*process),
+		id:        req.ContainerId,
+		processes: make(map[string]*process),
 		//mounts:          mountList,
 		useSandboxPidNs: req.SandboxPidns,
 		ctx:             ctx,
@@ -1011,7 +1013,7 @@ func (a *agentGRPC) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest)
 	//	Status: int32(exitCode),
 	//}, nil
 
-	return &pb.WaitProcessResponse{},nil
+	return &pb.WaitProcessResponse{}, nil
 }
 
 func getPIDIndex(title string) int {
@@ -1754,4 +1756,116 @@ func (a *agentGRPC) StopTracing(ctx context.Context, req *pb.StopTracingRequest)
 	stopTracingCalled = true
 
 	return emptyResp, nil
+}
+
+func (a *agentGRPC) GetUsers(ctx context.Context, req *pb.GetUsersRequest) (*pb.GetUsersResponse, error) {
+	logrus.Infof("receive [GetUsers] GetUsersRequest: %v", *req)
+	resp := pb.GetUsersResponse{
+		Username: []string{"admin", "administrator"},
+	}
+	//get all activate users
+	output, err := runCmd(`C:\Windows\System32\wbem\WMIC.exe`, "UserAccount", "where", "Status='OK'", "get", "Name", "/format:csv")
+	logrus.Debugf("output:%s, err:%v", output, err)
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to get users, error:%v", err)
+	} else {
+		for _, item := range strings.Split(string(output), "\r\r\n") {
+			if item == "Node,Name" || item == "" {
+				continue
+			}
+			u := strings.Split(item, ",")
+			if len(u) == 2 {
+				resp.Username = append(resp.Username, u[1])
+			} else {
+				logrus.Warnf("invalid user line: %v", u)
+			}
+		}
+	}
+	logrus.Infof("resp:%v", resp)
+	return &resp, nil
+}
+
+func (a *agentGRPC) GetHostname(ctx context.Context, req *pb.GetHostnameRequest) (*pb.GetHostnameResponse, error) {
+	hostname, _ := os.Hostname()
+	computerName, _ := windows.ComputerName()
+	resp := pb.GetHostnameResponse{
+		Hostname:     hostname,
+		ComputerName: computerName,
+	}
+	return &resp, nil
+}
+
+func (a *agentGRPC) GetNetworkConfig(ctx context.Context, req *pb.GetNetworkConfigRequest) (*pb.GetNetworkConfigResponse, error) {
+	logrus.Infof("receive [GetNetworkConfig] GetNetworkConfigRequest: %v", *req)
+	resp := pb.GetNetworkConfigResponse{}
+	var (
+		foundMac bool
+	)
+	//get interfaces
+	interfaceList, err := net.Interfaces()
+	if err != nil {
+		err = fmt.Errorf("failed to get interfaces, error:%v", err)
+		logrus.Warnf("%v", err)
+		resp.Error = fmt.Sprint(err)
+		return &resp, nil
+	}
+	for _, item := range interfaceList {
+		if !foundMac && item.HardwareAddr.String() == strings.Join(strings.Split(strings.ToLower(req.MacAddress), "-"), ":") {
+			foundMac = true
+			resp.MacAddress = item.HardwareAddr.String()
+			//get addr
+			addrs, _ := item.Addrs()
+			for _, addr := range addrs {
+				ipNet, isValidIpNet := addr.(*net.IPNet)
+				if isValidIpNet && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
+					resp.Addrs = append(resp.Addrs, &pb.Addrs{IpAddress: ipNet.IP.String(), Subnet: mask2Subnet(ipNet.Mask)})
+				} else {
+					logrus.Warnf("ip address %v is invalid, error:%v", addr, err)
+				}
+			}
+		}
+	}
+	if !foundMac {
+		resp.Error = fmt.Sprintf("failed to get mac %v", req.MacAddress)
+	}
+	logrus.Infof("resp: %v", resp)
+	return &resp, nil
+}
+
+func (a *agentGRPC) GetKMS(ctx context.Context, req *pb.GetKMSRequest) (*pb.GetKMSResponse, error) {
+	logrus.Infof("receive [GetKMS] GetKMSRequest: %v", *req)
+	resp := pb.GetKMSResponse{}
+
+	output, err := runCmd(`C:\Windows\System32\reg.exe`, "query", `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform`, "/v", "KeyManagementServiceName")
+	logrus.Debugf("output:%s, err:%v", output, err)
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to get kms server, error:%v", convertByte2String([]byte(err.Error()), GB18030))
+	} else {
+		for _, item := range strings.Split(string(output), "\r\n") {
+			if strings.Contains(item, "REG_SZ") {
+				ary := strings.Split(item, "REG_SZ")
+				if len(ary) >= 2 {
+					resp.Server = strings.TrimSpace(ary[1])
+					break
+				}
+			}
+		}
+	}
+	return &resp, nil
+}
+
+func (a *agentGRPC) SetUserPassword(ctx context.Context, req *pb.SetUserPasswordRequest) (*pb.SetUserPasswordResponse, error) {
+	return nil, nil
+}
+
+func (a *agentGRPC) SetHostname(ctx context.Context, req *pb.SetHostnameRequest) (*pb.SetHostnameResponse, error) {
+	return nil, nil
+}
+
+func (a *agentGRPC) SetNetworkConfig(ctx context.Context, req *pb.SetNetworkConfigRequest) (*pb.SetNetworkConfigResponse, error) {
+	return nil, nil
+}
+
+func (a *agentGRPC) SetKMS(ctx context.Context, req *pb.SetKMSRequest) (*pb.SetKMSResponse, error) {
+	return nil, nil
 }

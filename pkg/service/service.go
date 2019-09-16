@@ -32,8 +32,7 @@ import (
 	"github.com/kardianos/service"
 )
 
-
-type Service struct{
+type Service struct {
 	Logger *logrus.Entry
 }
 
@@ -56,7 +55,6 @@ func (s *Service) run() {
 		WithField("pid", os.Getpid()).
 		WithField("source", "agent")
 
-
 	var err error
 
 	// Check if this agent has been run as the init process.
@@ -76,12 +74,12 @@ func (s *Service) run() {
 
 	// Initialize unique sandbox structure.
 	sbox := &sandbox{
-		Logger: s.Logger,
+		Logger:     s.Logger,
 		containers: make(map[string]*container),
 		running:    false,
 		// pivot_root won't work for initramfs, see
 		// Documentation/filesystem/ramfs-rootfs-initramfs.txt
-		noPivotRoot:    false,//(fsType == typeRootfs),
+		noPivotRoot: false, //(fsType == typeRootfs),
 		//subreaper:      r,
 		pciDeviceMap:   make(map[string]string),
 		deviceWatchers: make(map[string](chan string)),
@@ -200,12 +198,10 @@ var ServiceConfig = &service.Config{
 	Description: "",
 }
 
-
-
 type process struct {
 	sync.RWMutex
 
-	id          string
+	id string
 	//process     libcontainer.Process
 	stdin       *os.File
 	stdout      *os.File
@@ -213,7 +209,7 @@ type process struct {
 	consoleSock *os.File
 	termMaster  *os.File
 	//epoller     *epoller
-	exitCodeCh  chan int
+	exitCodeCh chan int
 	sync.Once
 	stdinClosed bool
 }
@@ -221,8 +217,8 @@ type process struct {
 type container struct {
 	sync.RWMutex
 
-	id              string
-	initProcess     *process
+	id          string
+	initProcess *process
 	//container       libcontainer.Container
 	//config          configs.Config
 	processes       map[string]*process
@@ -241,18 +237,18 @@ type sandbox struct {
 
 	Logger *logrus.Entry
 
-	id                string
-	hostname          string
-	containers        map[string]*container
-	channel           channel
+	id         string
+	hostname   string
+	containers map[string]*container
+	channel    channel
 	//network           network
-	wg                sync.WaitGroup
+	wg sync.WaitGroup
 	//sharedPidNs       namespace
-	mounts            []string
+	mounts []string
 	//subreaper         reaper
-	server            *grpc.Server
-	pciDeviceMap      map[string]string
-	deviceWatchers    map[string](chan string)
+	server         *grpc.Server
+	pciDeviceMap   map[string]string
+	deviceWatchers map[string](chan string)
 	//sharedUTSNs       namespace
 	//sharedIPCNs       namespace
 	//guestHooks        *specs.Hooks
@@ -1209,6 +1205,8 @@ func (s *sandbox) startGRPC() {
 
 	pb.RegisterAgentServiceServer(grpcServer, grpcImpl)
 	pb.RegisterHealthServer(grpcServer, grpcImpl)
+	pb.RegisterWindowsServiceServer(grpcServer, grpcImpl)
+
 	s.server = grpcServer
 
 	s.wg.Add(1)
@@ -1425,4 +1423,3 @@ func setupDebugConsole(ctx context.Context, debugConsolePath string) error {
 
 	return nil
 }
-

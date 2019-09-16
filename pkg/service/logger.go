@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	logPath = `C:\Program Files\Kata\log`
+	logPath    = `C:\Program Files\Kata\log`
 	LogFileApp = "agent.log"
 )
 
