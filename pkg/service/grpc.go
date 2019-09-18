@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"golang.org/x/sys/windows"
 	"net"
+
 	//"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -1798,37 +1799,52 @@ func (a *agentGRPC) GetHostname(ctx context.Context, req *pb.GetHostnameRequest)
 func (a *agentGRPC) GetNetworkConfig(ctx context.Context, req *pb.GetNetworkConfigRequest) (*pb.GetNetworkConfigResponse, error) {
 	logrus.Infof("receive [GetNetworkConfig] GetNetworkConfigRequest: %v", *req)
 	resp := pb.GetNetworkConfigResponse{}
-	var (
-		foundMac bool
-	)
-	//get interfaces
-	interfaceList, err := net.Interfaces()
+	mac := strings.ToUpper(strings.Join(strings.Split(req.MacAddress, "-"), ":"))
+	resp.MacAddress = mac
+
+	fieldAry := []string{"IPAddress", "IPSubnet", "DefaultIPGateway", "DNSServerSearchOrder"}
+
+	output, err := runCmd("wmic", "NICCONFIG", "WHERE", fmt.Sprintf("MACAddress='%s'", mac), "GET", strings.Join(fieldAry, ","), "/format:csv")
 	if err != nil {
-		err = fmt.Errorf("failed to get interfaces, error:%v", err)
-		logrus.Warnf("%v", err)
-		resp.Error = fmt.Sprint(err)
-		return &resp, nil
-	}
-	for _, item := range interfaceList {
-		if !foundMac && item.HardwareAddr.String() == strings.Join(strings.Split(strings.ToLower(req.MacAddress), "-"), ":") {
-			foundMac = true
-			resp.MacAddress = item.HardwareAddr.String()
-			//get addr
-			addrs, _ := item.Addrs()
-			for _, addr := range addrs {
-				ipNet, isValidIpNet := addr.(*net.IPNet)
-				if isValidIpNet && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
-					resp.Addrs = append(resp.Addrs, &pb.Addrs{IpAddress: ipNet.IP.String(), Subnet: mask2Subnet(ipNet.Mask)})
-				} else {
-					logrus.Warnf("ip address %v is invalid, error:%v", addr, err)
+		resp.Error = fmt.Sprintf("failed to get network config, error:%v", convertByte2String([]byte(err.Error()), GB18030))
+	} else {
+		ary := strings.Split(string(output), "\r\r\n")
+		if len(ary) >= 4 {
+			//remove { and }
+			ary[1] = strings.Join(strings.Split(strings.Join(strings.Split(ary[1], "{"), ""), "}"), "")
+			ary[2] = strings.Join(strings.Split(strings.Join(strings.Split(ary[2], "{"), ""), "}"), "")
+			//split colume
+			titles := strings.Split(ary[1], ",")
+			values := strings.Split(ary[2], ",")
+			if len(titles) != len(values) {
+				resp.Error = fmt.Sprintf("failed to parse network config: %s", output)
+			} else {
+				var (
+					ipAry     []string
+					subnetAry []string
+				)
+				for i, col := range titles {
+					switch col {
+					case "IPAddress":
+						ipAry = strings.Split(values[i], ";")
+					case "IPSubnet":
+						subnetAry = strings.Split(values[i], ";")
+					case "DefaultIPGateway":
+						resp.Gateway = strings.Split(values[i], ";")[0]
+					case "DNSServerSearchOrder":
+						resp.DnsServer = strings.Split(values[i], ";")
+					}
+				}
+				for i, item := range ipAry {
+					ip := net.ParseIP(item)
+					if ip.To4() != nil {
+						addr := pb.Addrs{IpAddress: item, Subnet: subnetAry[i]}
+						resp.Addrs = append(resp.Addrs, &addr)
+					}
 				}
 			}
 		}
 	}
-	if !foundMac {
-		resp.Error = fmt.Sprintf("failed to get mac %v", req.MacAddress)
-	}
-	logrus.Infof("resp: %v", resp)
 	return &resp, nil
 }
 
