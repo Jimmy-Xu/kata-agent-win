@@ -1883,7 +1883,17 @@ func (a *agentGRPC) SetUserPassword(ctx context.Context, req *pb.SetUserPassword
 }
 
 func (a *agentGRPC) SetHostname(ctx context.Context, req *pb.SetHostnameRequest) (*pb.SetHostnameResponse, error) {
-	return nil, nil
+	logrus.Infof("receive [SetHostname] SetHostnameRequest: %v", *req)
+	resp := pb.SetHostnameResponse{}
+
+	hostname, _ := windows.ComputerName()
+	//use single quotes
+	output, err := runCmd("wmic", "computersystem", "where", fmt.Sprintf(`caption='%s'`, hostname), "rename", fmt.Sprintf(`'%s'`, req.Hostname))
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to set hostname to %v, error:%v", req.Hostname, err)
+	}
+	logrus.Infof("output:%s", output)
+	return &resp, nil
 }
 
 func (a *agentGRPC) SetNetworkConfig(ctx context.Context, req *pb.SetNetworkConfigRequest) (*pb.SetNetworkConfigResponse, error) {
@@ -1891,5 +1901,14 @@ func (a *agentGRPC) SetNetworkConfig(ctx context.Context, req *pb.SetNetworkConf
 }
 
 func (a *agentGRPC) SetKMS(ctx context.Context, req *pb.SetKMSRequest) (*pb.SetKMSResponse, error) {
-	return nil, nil
+	logrus.Infof("receive [SetKMS] SetKMSRequest: %v", *req)
+	resp := pb.SetKMSResponse{}
+
+	output, err := runCmd("cscript", "/Nologo", `C:\Windows\System32\slmgr.vbs`, "/skms", req.Server)
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to set kms server to %v, error:%v", req.Server, err)
+	}
+	logrus.Infof("output:%s", output)
+	return &resp, nil
+
 }
