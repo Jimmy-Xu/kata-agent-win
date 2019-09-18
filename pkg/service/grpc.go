@@ -1871,7 +1871,15 @@ func (a *agentGRPC) GetKMS(ctx context.Context, req *pb.GetKMSRequest) (*pb.GetK
 }
 
 func (a *agentGRPC) SetUserPassword(ctx context.Context, req *pb.SetUserPasswordRequest) (*pb.SetUserPasswordResponse, error) {
-	return nil, nil
+	logrus.Infof("receive [SetUserPassword] SetUserPasswordRequest: %v", *req)
+	resp := pb.SetUserPasswordResponse{}
+
+	output, err := runCmd("net", "user", req.Username, req.Password)
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to set password of user %v, error:%v", req.Username, err)
+	}
+	logrus.Infof("output:%s", output)
+	return &resp, nil
 }
 
 func (a *agentGRPC) SetHostname(ctx context.Context, req *pb.SetHostnameRequest) (*pb.SetHostnameResponse, error) {

@@ -1,7 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
+	"io/ioutil"
 )
 
 type Charset string
@@ -33,4 +36,13 @@ func convertByte2String(byte []byte, charset Charset) string {
 	}
 
 	return str
+}
+
+func GbkToUtf8(s []byte) ([]byte, error) {
+	reader := transform.NewReader(bytes.NewReader(s), simplifiedchinese.GBK.NewDecoder())
+	d, e := ioutil.ReadAll(reader)
+	if e != nil {
+		return nil, e
+	}
+	return d, nil
 }
