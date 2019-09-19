@@ -43,28 +43,6 @@ ifeq ($(HAVE_SYSTEMD),yes)
 	UNIT_DIR := $(shell pkg-config --variable=systemdsystemunitdir systemd)
 endif
 
-# Path to systemd drop-in snippet directory used to override the agent's
-# service without having to modify the pristine agent service file.
-SNIPPET_DIR := /etc/systemd/system/$(AGENT_SERVICE).d/
-
-GENERATED_FILES :=
-
-ifeq ($(INIT),no)
-    # Unit file to start kata agent in systemd systems
-    UNIT_FILES = kata-agent.service
-    GENERATED_FILES := $(UNIT_FILES)
-    # Target to be reached in systemd services
-    UNIT_FILES += kata-containers.target
-endif
-
-ifeq ($(TRACE),yes)
-    UNIT_FILES += jaeger-client-socat-redirector.service
-endif
-
-ifeq ($(TRACE_DEV_MODE),yes)
-    UNIT_FILES += kata-journald-host-redirect.service
-    SNIPPET_FILES += kata-redirect-agent-output-to-journal.conf
-endif
 
 VERSION_FILE := ./VERSION
 VERSION := $(shell grep -v ^\# $(VERSION_FILE))
@@ -96,18 +74,6 @@ $(TARGET): $(GENERATED_FILES) $(SOURCES) $(VERSION_FILE)
 	go build $(BUILDFLAGS) -tags "$(BUILDTAGS)" -o $@ \
 		-ldflags "-X main.version=$(VERSION_COMMIT) -X main.seccompSupport=$(SECCOMP) $(LDFLAGS)"
 
-install: $(TARGET)
-	install -D $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
-ifeq ($(INIT),no)
-	@echo "Installing systemd unit files..."
-	$(foreach f,$(UNIT_FILES),$(call INSTALL_FILE,$f,$(UNIT_DIR)))
-endif
-ifeq ($(TRACE_DEV_MODE),yes)
-	@echo "Installing systemd snippet files..."
-	@mkdir -p $(SNIPPET_DIR)
-	$(foreach f,$(SNIPPET_FILES),$(call INSTALL_FILE,$f,$(SNIPPET_DIR)))
-endif
-
 build-image:
 	# build an docker image for development
 	docker build ${BUILDARGS} -t ${AGENT_IMAGE}:${AGENT_TAG} .
@@ -117,7 +83,7 @@ proto: build-image
 
 .PHONY: clean test
 clean:
-	rm -f $(TARGET) $(GENERATED_FILES)
+	rm -f $(TARGET)
 
 test:
 	bash .ci/go-test.sh
@@ -127,13 +93,3 @@ check: check-go-static
 check-go-static:
 	bash .ci/static-checks.sh
 
-define INSTALL_FILE
-	install -D -m 644 $1 $(DESTDIR)$2/$1 || exit 1;
-endef
-
-$(GENERATED_FILES): %: %.in
-	@mkdir -p `dirname $@`
-	@sed \
-		-e 's|[@]bindir[@]|$(BINDIR)|g' \
-		-e 's|[@]kata-agent[@]|$(TARGET)|g' \
-		"$<" > "$@"

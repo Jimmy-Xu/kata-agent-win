@@ -22,10 +22,6 @@ func init() {
 	if len(os.Args) > 1 && os.Args[1] == "init" {
 		runtime.GOMAXPROCS(1)
 		runtime.LockOSThread()
-		//factory, _ := libcontainer.New("")
-		//if err := factory.StartInitialization(); err != nil {
-		//	agentLog.WithError(err).Error("init failed")
-		//}
 		panic("--this line should have never been executed, congratulations--")
 	}
 }

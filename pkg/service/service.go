@@ -1,15 +1,11 @@
 package service
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -57,21 +53,6 @@ func (s *Service) run() {
 
 	var err error
 
-	// Check if this agent has been run as the init process.
-	if os.Getpid() == 1 {
-		//if err = initAgentAsInit(); err != nil {
-		//	panic(fmt.Sprintf("failed to setup agent as init: %v", err))
-		//}
-	}
-
-	//r := &agentReaper{}
-	//r.init()
-
-	//fsType, err := getMountFSType("/")
-	//if err != nil {
-	//	return err
-	//}
-
 	// Initialize unique sandbox structure.
 	sbox := &sandbox{
 		Logger:     s.Logger,
@@ -92,17 +73,6 @@ func (s *Service) run() {
 		s.Logger.Fatalf("failed to setup logger: %v", err)
 	}
 
-	//logrus.Infof("setupTracing: %v", AgentName)
-	//rootSpan, rootContext, err = setupTracing(AgentName)
-	//if err != nil {
-	//	return fmt.Errorf("failed to setup tracing: %v", err)
-	//}
-
-	s.Logger.Infof("setupDebugConsole: %v", debugConsolePath)
-	if err := setupDebugConsole(rootContext, debugConsolePath); err != nil {
-		AgentLog.WithError(err).Error("failed to setup debug console")
-	}
-
 	// Set the sandbox context now that the context contains the tracing
 	// information.
 	sbox.ctx = rootContext
@@ -111,10 +81,6 @@ func (s *Service) run() {
 	if err = sbox.setupSignalHandler(); err != nil {
 		s.Logger.Fatalf("failed to setup signal handler: %v", err)
 	}
-
-	//if err = s.handleLocalhost(); err != nil {
-	//	return fmt.Errorf("failed to handle localhost: %v", err)
-	//}
 
 	// Check for vsock vs serial. This will fill the sandbox structure with
 	// information about the channel.
@@ -130,67 +96,18 @@ func (s *Service) run() {
 	s.Logger.Infof("s.waitForStopServer()")
 	go sbox.waitForStopServer()
 
-	s.Logger.Infof("s.listenToUdevEvents()")
-	go sbox.listenToUdevEvents()
-
 	s.Logger.Infof("s.wg.Wait()")
 	sbox.wg.Wait()
-
-	if !tracing {
-		// If tracing is not enabled, the agent should continue to run
-		// until the VM is killed by the runtime.
-		AgentLog.Debug("waiting to be killed")
-		//syscall.Pause()
-	}
-
-	// Report any traces before shutdown. This is not required if the
-	// client is using StartTracing()/StopTracing().
-	//if !stopTracingCalled {
-	//	stopTracing(rootContext)
-	//}
 
 	s.Logger.Infof("%v exit", AgentName)
 }
 
-const (
-	procCgroups = "/proc/cgroups"
-
-	bashPath         = "/bin/bash"
-	shPath           = "/bin/sh"
-	debugConsolePath = "/dev/console"
-)
-
 var (
-	// List of shells that are tried (in order) to setup a debug console
-	supportedShells = []string{bashPath, shPath}
-
-	meminfo = "/proc/meminfo"
-
-	// cgroup fs is mounted at /sys/fs when systemd is the init process
-	sysfsDir                     = "/sys"
-	cgroupPath                   = sysfsDir + "/fs/cgroup"
-	cgroupCpusetPath             = cgroupPath + "/cpuset"
-	cgroupMemoryPath             = cgroupPath + "/memory"
-	cgroupMemoryUseHierarchyPath = cgroupMemoryPath + "/memory.use_hierarchy"
-	cgroupMemoryUseHierarchyMode = os.FileMode(0400)
-
-	// Set by the build
-	seccompSupport string
-
 	// Set to the context that should be used for tracing gRPC calls.
 	grpcContext context.Context
 
 	rootContext context.Context
 )
-
-var initRootfsMounts = []initMount{
-	{"proc", "proc", "/proc", []string{"nosuid", "nodev", "noexec"}},
-	{"sysfs", "sysfs", sysfsDir, []string{"nosuid", "nodev", "noexec"}},
-	{"devtmpfs", "dev", "/dev", []string{"nosuid"}},
-	{"tmpfs", "tmpfs", "/dev/shm", []string{"nosuid", "nodev"}},
-	{"devpts", "devpts", "/dev/pts", []string{"nosuid", "noexec"}},
-	{"tmpfs", "tmpfs", "/run", []string{"nosuid", "nodev"}},
-}
 
 var ServiceConfig = &service.Config{
 	Name:        "kata-agent",
@@ -304,57 +221,6 @@ const (
 
 var commCh = unknownCh
 
-// This is the list of file descriptors we can properly close after the process
-// has been started. When the new process is exec(), those file descriptors are
-// duplicated and it is our responsibility to close them since we have opened
-// them.
-func (p *process) closePostStartFDs() {
-	//if p.process.Stdin != nil {
-	//	p.process.Stdin.(*os.File).Close()
-	//}
-	//
-	//if p.process.Stdout != nil {
-	//	p.process.Stdout.(*os.File).Close()
-	//}
-	//
-	//if p.process.Stderr != nil {
-	//	p.process.Stderr.(*os.File).Close()
-	//}
-	//
-	//if p.process.ConsoleSocket != nil {
-	//	p.process.ConsoleSocket.Close()
-	//}
-
-	if p.consoleSock != nil {
-		p.consoleSock.Close()
-	}
-}
-
-// This is the list of file descriptors we can properly close after the process
-// has exited. These are the remaining file descriptors that we have opened and
-// are no longer needed.
-func (p *process) closePostExitFDs() {
-	if p.termMaster != nil {
-		p.termMaster.Close()
-	}
-
-	if p.stdin != nil {
-		p.stdin.Close()
-	}
-
-	if p.stdout != nil {
-		p.stdout.Close()
-	}
-
-	if p.stderr != nil {
-		p.stderr.Close()
-	}
-
-	//if p.epoller != nil {
-	//	p.epoller.sockR.Close()
-	//}
-}
-
 func (c *container) trace(name string) (opentracing.Span, context.Context) {
 	if c.ctx == nil {
 		AgentLog.WithField("type", "bug").Error("trace called before context set")
@@ -377,20 +243,6 @@ func (c *container) deleteProcess(execID string) {
 	c.Lock()
 	delete(c.processes, execID)
 	c.Unlock()
-}
-
-func (c *container) removeContainer() error {
-	span, _ := c.trace("removeContainer")
-	defer span.Finish()
-	// This will terminates all processes related to this container, and
-	// destroy the container right after. But this will error in case the
-	// container in not in the right state.
-	//if err := c.container.Destroy(); err != nil {
-	//	return err
-	//}
-
-	//return removeMounts(c.mounts)
-	return nil
 }
 
 func (c *container) getProcess(execID string) (*process, error) {
@@ -471,10 +323,6 @@ func (s *sandbox) addGuestHooks(spec *specs.Spec) {
 	if spec.Hooks == nil {
 		spec.Hooks = &specs.Hooks{}
 	}
-
-	//spec.Hooks.Prestart = append(spec.Hooks.Prestart, s.guestHooks.Prestart...)
-	//spec.Hooks.Poststart = append(spec.Hooks.Poststart, s.guestHooks.Poststart...)
-	//spec.Hooks.Poststop = append(spec.Hooks.Poststop, s.guestHooks.Poststop...)
 }
 
 // unSetSandboxStorage will decrement the sandbox storage
@@ -514,14 +362,6 @@ func (s *sandbox) removeSandboxStorage(path string) error {
 	span.SetTag("path", path)
 	defer span.Finish()
 
-	//err := removeMounts([]string{path})
-	//if err != nil {
-	//	return grpcStatus.Errorf(codes.Unknown, "Unable to unmount sandbox storage path %s: %v", path, err)
-	//}
-	//err = os.RemoveAll(path)
-	//if err != nil {
-	//	return grpcStatus.Errorf(codes.Unknown, "Unable to delete sandbox storage path %s: %v", path, err)
-	//}
 	return nil
 }
 
@@ -666,101 +506,6 @@ func (s *sandbox) readStdio(cid, execID string, length int, stdout bool) ([]byte
 	return buf[:bytesRead], nil
 }
 
-func (s *sandbox) setupSharedNamespaces(ctx context.Context) error {
-	//span, _ := trace(ctx, "sandbox", "setupSharedNamespaces")
-	//defer span.Finish()
-	//
-	//// Set up shared IPC namespace
-	//ns, err := setupPersistentNs(nsTypeIPC)
-	//if err != nil {
-	//	return err
-	//}
-	//s.sharedIPCNs = *ns
-	//
-	//// Set up shared UTS namespace
-	//ns, err = setupPersistentNs(nsTypeUTS)
-	//if err != nil {
-	//	return err
-	//}
-	//s.sharedUTSNs = *ns
-
-	return nil
-}
-
-func (s *sandbox) unmountSharedNamespaces() error {
-	span, _ := s.trace("unmountSharedNamespaces")
-	defer span.Finish()
-
-	//if err := unix.Unmount(s.sharedIPCNs.path, unix.MNT_DETACH); err != nil {
-	//	return err
-	//}
-	//
-	//return unix.Unmount(s.sharedUTSNs.path, unix.MNT_DETACH)
-	return nil
-}
-
-// setupSharedPidNs will reexec this binary in order to execute the C routine
-// defined into pause.go file. The pauseBinArg is very important since that is
-// the flag allowing the C function to determine it should run the "pause".
-// This pause binary will ensure that we always have the init process of the
-// new PID namespace running into the namespace, preventing the namespace to
-// be destroyed if other processes are terminated.
-func (s *sandbox) setupSharedPidNs() error {
-	//span, _ := s.trace("setupSharedPidNs")
-	//defer span.Finish()
-	//
-	//cmd := &exec.Cmd{
-	//	Path: selfBinPath,
-	//	//Args: []string{os.Args[0], pauseBinArg},
-	//}
-	//
-	//cmd.SysProcAttr = &syscall.SysProcAttr{
-	//	//Cloneflags: syscall.CLONE_NEWPID,
-	//}
-	//
-	//exitCodeCh, err := s.subreaper.start(cmd)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//// Save info about this namespace inside sandbox structure.
-	//s.sharedPidNs = namespace{
-	//	path:       fmt.Sprintf("/proc/%d/ns/pid", cmd.Process.Pid),
-	//	init:       cmd.Process,
-	//	exitCodeCh: exitCodeCh,
-	//}
-
-	return nil
-}
-
-func (s *sandbox) teardownSharedPidNs() error {
-	//span, _ := s.trace("teardownSharedPidNs")
-	//defer span.Finish()
-	//
-	//if !s.sandboxPidNs {
-	//	// We are not in a case where we have created a pause process.
-	//	// Simply clear out the sharedPidNs path.
-	//	s.sharedPidNs.path = ""
-	//	return nil
-	//}
-	//
-	//// Terminates the "init" process of the PID namespace.
-	//if err := s.sharedPidNs.init.Kill(); err != nil {
-	//	return err
-	//}
-	//
-	//// Using helper function wait() to deal with the subreaper.
-	//osProcess := (*reaperOSProcess)(s.sharedPidNs.init)
-	//if _, err := s.subreaper.wait(s.sharedPidNs.exitCodeCh, osProcess); err != nil {
-	//	return err
-	//}
-	//
-	//// Empty the sandbox structure.
-	//s.sharedPidNs = namespace{}
-
-	return nil
-}
-
 func (s *sandbox) waitForStopServer() {
 	span, _ := s.trace("waitForStopServer")
 	defer span.Finish()
@@ -804,98 +549,6 @@ func (s *sandbox) waitForStopServer() {
 	s.stopGRPC()
 }
 
-func (s *sandbox) listenToUdevEvents() {
-	//fieldLogger := AgentLog.WithField("subsystem", "udevlistener")
-	//
-	//uEvHandler, err := uevent.NewHandler()
-	//if err != nil {
-	//	fieldLogger.Warnf("Error starting uevent listening loop %s", err)
-	//	return
-	//}
-	//defer uEvHandler.Close()
-	//
-	//fieldLogger.Infof("Started listening for uevents")
-	//
-	//for {
-	//	uEv, err := uEvHandler.Read()
-	//	if err != nil {
-	//		fieldLogger.Error(err)
-	//		continue
-	//	}
-	//
-	//	// We only care about add event
-	//	if uEv.Action != "add" {
-	//		continue
-	//	}
-	//
-	//	span, _ := trace(rootContext, "udev", "udev event")
-	//	span.SetTag("udev-action", uEv.Action)
-	//	span.SetTag("udev-name", uEv.DevName)
-	//	span.SetTag("udev-path", uEv.DevPath)
-	//	span.SetTag("udev-subsystem", uEv.SubSystem)
-	//	span.SetTag("udev-seqno", uEv.SeqNum)
-	//
-	//	fieldLogger = fieldLogger.WithFields(logrus.Fields{
-	//		"uevent-action":    uEv.Action,
-	//		"uevent-devpath":   uEv.DevPath,
-	//		"uevent-subsystem": uEv.SubSystem,
-	//		"uevent-seqnum":    uEv.SeqNum,
-	//		"uevent-devname":   uEv.DevName,
-	//	})
-	//
-	//	fieldLogger.Infof("Received add uevent")
-	//
-	//	// Check if device hotplug event results in a device node being created.
-	//	if uEv.DevName != "" && strings.HasPrefix(uEv.DevPath, rootBusPath) {
-	//		// Lock is needed to safey read and modify the pciDeviceMap and deviceWatchers.
-	//		// This makes sure that watchers do not access the map while it is being updated.
-	//		s.Lock()
-	//
-	//		// Add the device node name to the pci device map.
-	//		s.pciDeviceMap[uEv.DevPath] = uEv.DevName
-	//
-	//		// Notify watchers that are interested in the udev event.
-	//		// Close the channel after watcher has been notified.
-	//		for devAddress, ch := range s.deviceWatchers {
-	//			if ch == nil {
-	//				continue
-	//			}
-	//
-	//			fieldLogger.Infof("Got a wait channel for device %s", devAddress)
-	//
-	//			// blk driver case
-	//			if strings.HasPrefix(uEv.DevPath, filepath.Join(rootBusPath, devAddress)) {
-	//				goto OUT
-	//			}
-	//
-	//			if strings.Contains(uEv.DevPath, devAddress) {
-	//				// scsi driver case
-	//				if strings.HasSuffix(devAddress, scsiBlockSuffix) {
-	//					goto OUT
-	//				}
-	//			}
-	//
-	//			continue
-	//
-	//		OUT:
-	//			ch <- uEv.DevName
-	//			close(ch)
-	//			delete(s.deviceWatchers, devAddress)
-	//
-	//		}
-	//
-	//		s.Unlock()
-	//	} else if onlinePath := filepath.Join(sysfsDir, uEv.DevPath, "online"); strings.HasPrefix(onlinePath, sysfsMemOnlinePath) {
-	//		// Check memory hotplug and online if possible
-	//		if err := ioutil.WriteFile(onlinePath, []byte("1"), 0600); err != nil {
-	//			fieldLogger.WithError(err).Error("failed online device")
-	//		}
-	//	}
-	//
-	//	span.Finish()
-	//}
-}
-
 // This loop is meant to be run inside a separate Go routine.
 func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
 	s.Logger.Infof("signalHandlerLoop - begin")
@@ -903,24 +556,11 @@ func (s *sandbox) signalHandlerLoop(sigCh chan os.Signal, errCh chan error) {
 	// Lock OS thread as subreaper is a thread local capability
 	// and is not inherited by children created by fork(2) and clone(2).
 	runtime.LockOSThread()
-	// Set agent as subreaper
-	//err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, uintptr(1), 0, 0, 0)
-	//if err != nil {
-	//	errCh <- err
-	//	return
-	//}
 	s.Logger.Infof("close(errCh)")
 	close(errCh)
 
 	for sig := range sigCh {
 		logger := AgentLog.WithField("signal", sig)
-
-		//if sig == unix.SIGCHLD {
-		//	if err := s.subreaper.reap(); err != nil {
-		//		logger.WithError(err).Error("failed to reap")
-		//		continue
-		//	}
-		//}
 
 		logger.Infof("signalHandlerLoop - 1")
 		nativeSignal, ok := sig.(syscall.Signal)
@@ -966,68 +606,18 @@ func (s *sandbox) setupSignalHandler() error {
 	return <-errCh
 }
 
-// getMemory returns a string containing the total amount of memory reported
-// by the kernel. The string includes a suffix denoting the units the memory
-// is measured in.
-func getMemory() (string, error) {
-	bytes, err := ioutil.ReadFile(meminfo)
-	if err != nil {
-		return "", err
-	}
-
-	lines := string(bytes)
-
-	for _, line := range strings.Split(lines, "\n") {
-		if !strings.HasPrefix(line, "MemTotal") {
-			continue
-		}
-
-		expectedFields := 2
-
-		fields := strings.Split(line, ":")
-		count := len(fields)
-
-		if count != expectedFields {
-			return "", fmt.Errorf("expected %d fields, got %d in line %q", expectedFields, count, line)
-		}
-
-		if fields[1] == "" {
-			return "", fmt.Errorf("cannot determine total memory from line %q", line)
-		}
-
-		memTotal := strings.TrimSpace(fields[1])
-		if memTotal == "" {
-			return "", fmt.Errorf("cannot determine total memory from line %q", line)
-		}
-
-		return memTotal, nil
-	}
-
-	return "", fmt.Errorf("no lines in file %q", meminfo)
+func getMemory() (int, error) {
+	return 0, nil
 }
 
 func getAnnounceFields() (logrus.Fields, error) {
-	var deviceHandlers []string
-	var storageHandlers []string
-
-	//for handler := range deviceHandlerList {
-	//	deviceHandlers = append(deviceHandlers, handler)
-	//}
-	//
-	//for handler := range storageHandlerList {
-	//	storageHandlers = append(storageHandlers, handler)
-	//}
-
-	//memTotal, err := getMemory()
-	//if err != nil {
-	//	return logrus.Fields{}, err
-	//}
-
+	memTotal, err := getMemory()
+	if err != nil {
+		return logrus.Fields{}, err
+	}
 	return logrus.Fields{
-		"version":          version,
-		"device-handlers":  strings.Join(deviceHandlers, ","),
-		"storage-handlers": strings.Join(storageHandlers, ","),
-		//"system-memory":    memTotal,
+		"version":       version,
+		"system-memory": memTotal,
 	}, nil
 }
 
@@ -1041,10 +631,8 @@ func formatFields(fields logrus.Fields) []string {
 			// convert non-string value into a string
 			value = fmt.Sprint(v)
 		}
-
 		results = append(results, fmt.Sprintf("%s=%q", k, value))
 	}
-
 	return results
 }
 
@@ -1277,149 +865,4 @@ func (s *sandbox) stopGRPC() {
 		s.server.Stop()
 		s.server = nil
 	}
-}
-
-type initMount struct {
-	fstype, src, dest string
-	options           []string
-}
-
-func getCgroupMounts(cgPath string) ([]initMount, error) {
-	f, err := os.Open(cgPath)
-	if err != nil {
-		return []initMount{}, err
-	}
-	defer f.Close()
-
-	hasDevicesCgroup := false
-
-	cgroupMounts := []initMount{{"tmpfs", "tmpfs", cgroupPath, []string{"nosuid", "nodev", "noexec", "mode=755"}}}
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		text := scanner.Text()
-		fields := strings.Split(text, "\t")
-
-		// #subsys_name    hierarchy       num_cgroups     enabled
-		// fields[0]       fields[1]       fields[2]       fields[3]
-		cgroup := fields[0]
-		if cgroup == "" || cgroup[0] == '#' || (len(fields) > 3 && fields[3] == "0") {
-			continue
-		}
-		if cgroup == "devices" {
-			hasDevicesCgroup = true
-		}
-		cgroupMounts = append(cgroupMounts, initMount{"cgroup", "cgroup",
-			filepath.Join(cgroupPath, cgroup), []string{"nosuid", "nodev", "noexec", "relatime", cgroup}})
-	}
-
-	if err = scanner.Err(); err != nil {
-		return []initMount{}, err
-	}
-
-	// refer to https://github.com/opencontainers/runc/blob/v1.0.0-rc5/libcontainer/cgroups/fs/apply_raw.go#L132
-	if !hasDevicesCgroup {
-		return []initMount{}, err
-	}
-
-	cgroupMounts = append(cgroupMounts, initMount{"tmpfs", "tmpfs",
-		cgroupPath, []string{"remount", "ro", "nosuid", "nodev", "noexec", "mode=755"}})
-	return cgroupMounts, nil
-}
-
-func mountToRootfs(m initMount) error {
-	if err := os.MkdirAll(m.dest, os.FileMode(0755)); err != nil {
-		return err
-	}
-
-	//flags, options := parseMountFlagsAndOptions(m.options)
-
-	//if err := syscall.Mount(m.src, m.dest, m.fstype, uintptr(flags), options); err != nil {
-	//	return grpcStatus.Errorf(codes.Internal, "Could not mount %v to %v: %v", m.src, m.dest, err)
-	//}
-	return nil
-}
-
-func generalMount() error {
-	for _, m := range initRootfsMounts {
-		if err := mountToRootfs(m); err != nil {
-			// dev is already mounted if the rootfs image is used
-			if m.src != "dev" {
-				return err
-			}
-			AgentLog.WithError(err).WithField("src", m.src).Warnf("Could not mount filesystem")
-		}
-	}
-	return nil
-}
-
-func cgroupsMount() error {
-	cgroups, err := getCgroupMounts(procCgroups)
-	if err != nil {
-		return nil
-	}
-	for _, m := range cgroups {
-		if err := mountToRootfs(m); err != nil {
-			return err
-		}
-	}
-
-	// Enable memory hierarchical account.
-	// For more information see https://www.kernel.org/doc/Documentation/cgroup-v1/memory.txt
-	return ioutil.WriteFile(cgroupMemoryUseHierarchyPath, []byte{'1'}, cgroupMemoryUseHierarchyMode)
-}
-
-func setupDebugConsole(ctx context.Context, debugConsolePath string) error {
-	if !debugConsole {
-		return nil
-	}
-
-	var shellPath string
-	for _, s := range supportedShells {
-		var err error
-		if _, err = os.Stat(s); err == nil {
-			shellPath = s
-			break
-		}
-		AgentLog.WithError(err).WithField("shell", s).Warn("Shell not found")
-	}
-
-	if shellPath == "" {
-		return fmt.Errorf("No available shells (checked %v)", supportedShells)
-	}
-
-	cmd := exec.Command(shellPath)
-	cmd.Env = os.Environ()
-	f, err := os.OpenFile(debugConsolePath, os.O_RDWR, 0600)
-	if err != nil {
-		return err
-	}
-
-	cmd.Stdin = f
-	cmd.Stdout = f
-	cmd.Stderr = f
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		//// Create Session
-		//Setsid: true,
-		//// Set Controlling terminal to Ctty
-		//Setctty: true,
-		//Ctty:    int(f.Fd()),
-	}
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				// stop the thread
-				return
-			default:
-				dcmd := *cmd
-				if err := dcmd.Run(); err != nil {
-					AgentLog.WithError(err).Warn("failed to start debug console")
-				}
-			}
-		}
-	}()
-
-	return nil
 }

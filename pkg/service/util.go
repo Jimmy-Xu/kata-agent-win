@@ -1,10 +1,11 @@
 package service
 
 import (
-	"bytes"
+	"fmt"
+	"os/exec"
+
+	"github.com/sirupsen/logrus"
 	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
-	"io/ioutil"
 )
 
 type Charset string
@@ -38,11 +39,21 @@ func convertByte2String(byte []byte, charset Charset) string {
 	return str
 }
 
-func GbkToUtf8(s []byte) ([]byte, error) {
-	reader := transform.NewReader(bytes.NewReader(s), simplifiedchinese.GBK.NewDecoder())
-	d, e := ioutil.ReadAll(reader)
-	if e != nil {
-		return nil, e
+func runCmd(cmd string, args ...string) (string, error) {
+	cmdLine := exec.Command(cmd, args...)
+	logrus.Debugf("runCmd: %v", cmdLine.Args)
+	buf, err := cmdLine.CombinedOutput()
+	out := convertByte2String(buf, GBK)
+	logrus.Infof("output:%s", out)
+	if err != nil {
+		if len(out) != 0 {
+			return "", fmt.Errorf("%s failed: %v: %s", args[0], err, out)
+		}
+
+		if len(out) != 0 {
+			return "", fmt.Errorf("%s failed: %v: %s", args[0], err, out)
+		}
+		return "", fmt.Errorf("%s failed: %v", args[0], err)
 	}
-	return d, nil
+	return out, nil
 }

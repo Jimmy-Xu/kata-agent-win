@@ -16,7 +16,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -47,17 +46,9 @@ type agentGRPC struct {
 const (
 	cpuRegexpPattern = "cpu[0-9]*"
 	memRegexpPattern = "memory[0-9]*"
-	libcontainerPath = "/run/libcontainer"
 )
 
 var (
-	sysfsCPUOnlinePath          = "/sys/devices/system/cpu"
-	sysfsMemOnlinePath          = "/sys/devices/system/memory"
-	sysfsMemoryBlockSizePath    = "/sys/devices/system/memory/block_size_bytes"
-	sysfsMemoryHotplugProbePath = "/sys/devices/system/memory/probe"
-	sysfsConnectedCPUsPath      = filepath.Join(sysfsCPUOnlinePath, "online")
-	containersRootfsPath        = "/run"
-
 	// set when StartTracing() is called.
 	startTracingCalled = false
 
@@ -78,8 +69,6 @@ const onlineCPUMemWaitTime = 100 * time.Millisecond
 
 var onlineCPUMaxTries = uint32(100)
 
-const cpusetMode = 0644
-
 // handleError will log the specified error if wait is false
 func handleError(wait bool, err error) error {
 	if !wait {
@@ -93,74 +82,7 @@ func handleError(wait bool, err error) error {
 // If nbResources is <= 0 then there is no limit and all resources are connected.
 // Returns the number of resources connected.
 func onlineResources(resource onlineResource, nbResources int32) (uint32, error) {
-	files, err := ioutil.ReadDir(resource.sysfsOnlinePath)
-	if err != nil {
-		return 0, err
-	}
-
-	var count uint32
-	for _, file := range files {
-		matched, err := regexp.MatchString(resource.regexpPattern, file.Name())
-		if err != nil {
-			return count, err
-		}
-
-		if !matched {
-			continue
-		}
-
-		onlinePath := filepath.Join(resource.sysfsOnlinePath, file.Name(), "online")
-		status, err := ioutil.ReadFile(onlinePath)
-		if err != nil {
-			// resource cold plugged
-			continue
-		}
-
-		if strings.Trim(string(status), "\n\t ") == "0" {
-			if err := ioutil.WriteFile(onlinePath, []byte("1"), 0600); err != nil {
-				AgentLog.WithField("online-path", onlinePath).WithError(err).Errorf("Could not online resource")
-				continue
-			}
-			count++
-			if nbResources > 0 && count == uint32(nbResources) {
-				return count, nil
-			}
-		}
-	}
-
-	return count, nil
-}
-
-func onlineCPUResources(nbCpus uint32) error {
-	resource := onlineResource{
-		sysfsOnlinePath: sysfsCPUOnlinePath,
-		regexpPattern:   cpuRegexpPattern,
-	}
-
-	var count uint32
-	for i := uint32(0); i < onlineCPUMaxTries; i++ {
-		r, err := onlineResources(resource, int32(nbCpus-count))
-		if err != nil {
-			return err
-		}
-		count += r
-		if count == nbCpus {
-			return nil
-		}
-		time.Sleep(onlineCPUMemWaitTime)
-	}
-
-	return fmt.Errorf("only %d of %d were connected", count, nbCpus)
-}
-
-func onlineMemResources() error {
-	resource := onlineResource{
-		sysfsOnlinePath: sysfsMemOnlinePath,
-		regexpPattern:   memRegexpPattern,
-	}
-
-	_, err := onlineResources(resource, -1)
-	return err
+	return 0, nil
 }
 
 // updates a cpuset cgroups path visiting each sub-directory in cgroupPath parent and writing
@@ -169,129 +91,14 @@ func onlineMemResources() error {
 // cookies are used for performance reasons in order to
 // don't update a cgroup twice.
 func updateCpusetPath(cgroupPath string, newCpuset string, cookies cookie) error {
-	// Each cpuset cgroup parent MUST BE updated with the actual number of vCPUs.
-	//Start to update from cgroup system root.
-	cgroupParentPath := cgroupCpusetPath
-
-	//cpusetGuest, err := getCpusetGuest()
-	//if err != nil {
-	//	return err
-	//}
-
-	// Update parents with max set of current cpus
-	//Iterate  all parent dirs in order.
-	//This is needed to ensure the cgroup parent has cpus on needed needed
-	//by the request.
-	cgroupsParentPaths := strings.Split(filepath.Dir(cgroupPath), "/")
-	for _, path := range cgroupsParentPaths {
-		// Skip if empty.
-		if path == "" {
-			continue
-		}
-
-		cgroupParentPath = filepath.Join(cgroupParentPath, path)
-
-		// check if the cgroup was already updated.
-		if cookies[cgroupParentPath] {
-			AgentLog.WithField("path", cgroupParentPath).Debug("cpuset cgroup already updated")
-			continue
-		}
-
-		cpusetCpusParentPath := filepath.Join(cgroupParentPath, "cpuset.cpus")
-
-		AgentLog.WithField("path", cpusetCpusParentPath).Debug("updating cpuset parent cgroup")
-
-		//if err := ioutil.WriteFile(cpusetCpusParentPath, []byte(cpusetGuest), cpusetMode); err != nil {
-		//	return fmt.Errorf("Could not update parent cpuset cgroup (%s) cpuset:'%s': %v", cpusetCpusParentPath, cpusetGuest, err)
-		//}
-
-		// add cgroup path to the cookies.
-		cookies[cgroupParentPath] = true
-	}
-
-	// Finally update group path with requested value.
-	cpusetCpusPath := filepath.Join(cgroupCpusetPath, cgroupPath, "cpuset.cpus")
-
-	AgentLog.WithField("path", cpusetCpusPath).Debug("updating cpuset cgroup")
-
-	//if err := ioutil.WriteFile(cpusetCpusPath, []byte(newCpuset), cpusetMode); err != nil {
-	//	return fmt.Errorf("Could not update parent cpuset cgroup (%s) cpuset:'%s': %v", cpusetCpusPath, cpusetGuest, err)
-	//}
-
 	return nil
 }
 
 func (a *agentGRPC) onlineCPUMem(req *pb.OnlineCPUMemRequest) error {
-	if req.NbCpus == 0 && req.CpuOnly {
-		return handleError(req.Wait, fmt.Errorf("requested number of CPUs '%d' must be greater than 0", req.NbCpus))
-	}
-
-	// we are going to update the containers of the sandbox, we have to lock it
-	a.sandbox.Lock()
-	defer a.sandbox.Unlock()
-
-	if req.NbCpus > 0 {
-		AgentLog.WithField("vcpus-to-connect", req.NbCpus).Debug("connecting vCPUs")
-		if err := onlineCPUResources(req.NbCpus); err != nil {
-			return handleError(req.Wait, err)
-		}
-	}
-
-	if !req.CpuOnly {
-		if err := onlineMemResources(); err != nil {
-			return handleError(req.Wait, err)
-		}
-	}
-
-	// At this point all CPUs have been connected, we need to know
-	// the actual range of CPUs
-	//connectedCpus, err := getCpusetGuest()
-	//if err != nil {
-	//	return handleError(req.Wait, fmt.Errorf("Could not get the actual range of connected CPUs: %v", err))
-	//}
-	//AgentLog.WithField("range-of-vcpus", connectedCpus).Debug("connecting vCPUs")
-
-	//cookies := make(cookie)
-
-	// Now that we know the actual range of connected CPUs, we need to iterate over
-	// all containers an update each cpuset cgroup. This is not required in docker
-	// containers since they don't hot add/remove CPUs.
-	//for _, c := range a.sandbox.containers {
-	//	AgentLog.WithField("container", c.container.ID()).Debug("updating cpuset cgroup")
-	//	contConfig := c.container.Config()
-	//	cgroupPath := contConfig.Cgroups.Path
-	//
-	//	// In order to avoid issues updating the container cpuset cgroup, its cpuset cgroup *parents*
-	//	// MUST BE updated, otherwise we'll get next errors:
-	//	// - write /sys/fs/cgroup/cpuset/XXXXX/cpuset.cpus: permission denied
-	//	// - write /sys/fs/cgroup/cpuset/XXXXX/cpuset.cpus: device or resource busy
-	//	// NOTE: updating container cpuset cgroup *parents* won't affect container cpuset cgroup, for example if container cpuset cgroup has "0"
-	//	// and its cpuset cgroup *parents* have "0-5", the container will be able to use only the CPU 0.
-	//
-	//	// cpuset assinged containers are not updated, only we update its parents.
-	//	if contConfig.Cgroups.Resources.CpusetCpus != "" {
-	//		AgentLog.WithField("cpuset", contConfig.Cgroups.Resources.CpusetCpus).Debug("updating container cpuset cgroup parents")
-	//		// remove container cgroup directory
-	//		cgroupPath = filepath.Dir(cgroupPath)
-	//	}
-	//
-	//	if err := updateCpusetPath(cgroupPath, connectedCpus, cookies); err != nil {
-	//		return handleError(req.Wait, err)
-	//	}
-	//}
-
 	return nil
 }
 
 func setConsoleCarriageReturn(fd int) error {
-	//termios, err := unix.IoctlGetTermios(fd, unix.TCGETS)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//termios.Oflag |= unix.ONLCR
-	//
-	//return unix.IoctlSetTermios(fd, unix.TCSETS, termios)
 	return nil
 }
 
@@ -413,21 +220,6 @@ func (a *agentGRPC) execProcess(ctr *container, proc *process, createContainer b
 	//a.sandbox.subreaper.lock()
 	//defer a.sandbox.subreaper.unlock()
 
-	//if createContainer {
-	//	err = ctr.container.Start(&proc.process)
-	//} else {
-	//	err = ctr.container.Run(&(proc.process))
-	//}
-	//if err != nil {
-	//	return grpcStatus.Errorf(codes.Internal, "Could not run process: %v", err)
-	//}
-	//
-	//// Get process PID
-	//pid, err := proc.process.Pid()
-	//if err != nil {
-	//	return err
-	//}
-
 	proc.exitCodeCh = make(chan int, 1)
 
 	// Create process channel to allow WaitProcess to wait on it.
@@ -448,118 +240,8 @@ func (a *agentGRPC) postExecProcess(ctr *container, proc *process) error {
 	if proc == nil {
 		return grpcStatus.Error(codes.InvalidArgument, "Process cannot be nil")
 	}
-
-	defer proc.closePostStartFDs()
-
-	// Setup terminal if enabled.
-	//if proc.consoleSock != nil {
-	//	termMaster, err := utils.RecvFd(proc.consoleSock)
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	if err := setConsoleCarriageReturn(int(termMaster.Fd())); err != nil {
-	//		return err
-	//	}
-	//
-	//	proc.termMaster = termMaster
-	//
-	//	// Get process PID
-	//	pid, err := proc.process.Pid()
-	//	if err != nil {
-	//		return err
-	//	}
-	//	a.sandbox.subreaper.setEpoller(pid, proc.epoller)
-	//
-	//	if err = proc.epoller.add(proc.termMaster); err != nil {
-	//		return err
-	//	}
-	//}
-
-	ctr.setProcess(proc)
-
 	return nil
 }
-
-// This function updates the container namespaces configuration based on the
-// sandbox information. When the sandbox is created, it can be setup in a way
-// that all containers will share some specific namespaces. This is the agent
-// responsibility to create those namespaces so that they can be shared across
-// several containers.
-// If the sandbox has not been setup to share namespaces, then we assume all
-// containers will be started in their own new namespace.
-// The value of a.sandbox.sharedPidNs.path will always override the namespace
-// path set by the spec, since we will always ignore it. Indeed, it makes no
-// sense to rely on the namespace path provided by the host since namespaces
-// are different inside the guest.
-//func (a *agentGRPC) updateContainerConfigNamespaces(config *configs.Config, ctr *container) {
-//	var ipcNs, utsNs bool
-//
-//	for idx, ns := range config.Namespaces {
-//		if ns.Type == configs.NEWIPC {
-//			config.Namespaces[idx].Path = a.sandbox.sharedIPCNs.path
-//			ipcNs = true
-//		}
-//
-//		if ns.Type == configs.NEWUTS {
-//			config.Namespaces[idx].Path = a.sandbox.sharedUTSNs.path
-//			utsNs = true
-//		}
-//	}
-//
-//	if !ipcNs {
-//		newIPCNs := configs.Namespace{
-//			Type: configs.NEWIPC,
-//			Path: a.sandbox.sharedIPCNs.path,
-//		}
-//		config.Namespaces = append(config.Namespaces, newIPCNs)
-//	}
-//
-//	if !utsNs {
-//		newUTSNs := configs.Namespace{
-//			Type: configs.NEWUTS,
-//			Path: a.sandbox.sharedUTSNs.path,
-//		}
-//		config.Namespaces = append(config.Namespaces, newUTSNs)
-//	}
-//
-//	// Update PID namespace.
-//	var pidNsPath string
-//
-//	// Use shared pid ns if useSandboxPidns has been set in either
-//	// the CreateSandbox request or CreateContainer request.
-//	// Else set this to empty string so that a new pid namespace is
-//	// created for the container.
-//	if ctr.useSandboxPidNs || a.sandbox.sandboxPidNs {
-//		pidNsPath = a.sandbox.sharedPidNs.path
-//	} else {
-//		pidNsPath = ""
-//	}
-//
-//	newPidNs := configs.Namespace{
-//		Type: configs.NEWPID,
-//		Path: pidNsPath,
-//	}
-//	config.Namespaces = append(config.Namespaces, newPidNs)
-//}
-
-//func (a *agentGRPC) updateContainerConfigPrivileges(spec *specs.Spec, config *configs.Config) error {
-//	if spec == nil || spec.Process == nil {
-//		// Don't throw an error in case the Spec does not contain any
-//		// information about NoNewPrivileges.
-//		return nil
-//	}
-//
-//	// Add the value for NoNewPrivileges option.
-//	config.NoNewPrivileges = spec.Process.NoNewPrivileges
-//
-//	return nil
-//}
-
-//func (a *agentGRPC) updateContainerConfig(spec *specs.Spec, config *configs.Config, ctr *container) error {
-//	a.updateContainerConfigNamespaces(config, ctr)
-//	return a.updateContainerConfigPrivileges(spec, config)
-//}
 
 // rollbackFailingContainerCreation rolls back important steps that might have
 // been performed before the container creation failed.
@@ -567,151 +249,9 @@ func (a *agentGRPC) postExecProcess(ctr *container, proc *process) error {
 // - Delete the container from the agent internal map
 // - Unmount all mounts related to this container
 func (a *agentGRPC) rollbackFailingContainerCreation(ctr *container) {
-	//if ctr.container != nil {
-	//	ctr.container.Destroy()
-	//}
-
-	a.sandbox.deleteContainer(ctr.id)
-
-	//if err := removeMounts(ctr.mounts); err != nil {
-	//	AgentLog.WithError(err).Error("rollback failed removeMounts()")
-	//}
 }
 
-//func (a *agentGRPC) finishCreateContainer(ctr *container, req *pb.CreateContainerRequest, config *configs.Config) (resp *gpb.Empty, err error) {
-//	containerPath := filepath.Join(libcontainerPath, a.sandbox.id)
-//	factory, err := libcontainer.New(containerPath, libcontainer.Cgroupfs)
-//	if err != nil {
-//		return emptyResp, err
-//	}
-//
-//	ctr.container, err = factory.Create(req.ContainerId, config)
-//	if err != nil {
-//		return emptyResp, err
-//	}
-//	ctr.config = *config
-//
-//	ctr.initProcess, err = buildProcess(req.OCI.Process, req.ExecId, true)
-//	if err != nil {
-//		return emptyResp, err
-//	}
-//
-//	if err = a.execProcess(ctr, ctr.initProcess, true); err != nil {
-//		return emptyResp, err
-//	}
-//
-//	// Make sure add Container to Sandbox, before call updateSharedPidNs
-//	a.sandbox.setContainer(ctr.ctx, req.ContainerId, ctr)
-//	if err := a.updateSharedPidNs(ctr); err != nil {
-//		return emptyResp, err
-//	}
-//
-//	return emptyResp, a.postExecProcess(ctr, ctr.initProcess)
-//}
-
 func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainerRequest) (resp *gpb.Empty, err error) {
-	if err := a.createContainerChecks(req); err != nil {
-		return emptyResp, err
-	}
-
-	//// re-scan PCI bus
-	//// looking for hidden devices
-	//if err = rescanPciBus(); err != nil {
-	//	AgentLog.WithError(err).Warn("Could not rescan PCI bus")
-	//}
-	//
-	//// Some devices need some extra processing (the ones invoked with
-	//// --device for instance), and that's what this call is doing. It
-	//// updates the devices listed in the OCI spec, so that they actually
-	//// match real devices inside the VM. This step is necessary since we
-	//// cannot predict everything from the caller.
-	//if err = addDevices(ctx, req.Devices, req.OCI, a.sandbox); err != nil {
-	//	return emptyResp, err
-	//}
-	//
-	//// Both rootfs and volumes (invoked with --volume for instance) will
-	//// be processed the same way. The idea is to always mount any provided
-	//// storage to the specified MountPoint, so that it will match what's
-	//// inside oci.Mounts.
-	//// After all those storages have been processed, no matter the order
-	//// here, the agent will rely on libcontainer (using the oci.Mounts
-	//// list) to bind mount all of them inside the container.
-	//mountList, err := addStorages(ctx, req.Storages, a.sandbox)
-	//if err != nil {
-	//	return emptyResp, err
-	//}
-
-	ctr := &container{
-		id:        req.ContainerId,
-		processes: make(map[string]*process),
-		//mounts:          mountList,
-		useSandboxPidNs: req.SandboxPidns,
-		ctx:             ctx,
-	}
-
-	// In case the container creation failed, make sure we cleanup
-	// properly by rolling back the actions previously performed.
-	defer func() {
-		if err != nil {
-			a.rollbackFailingContainerCreation(ctr)
-		}
-	}()
-
-	// Convert the spec to an actual OCI specification structure.
-	ociSpec, err := pb.GRPCtoOCI(req.OCI)
-	if err != nil {
-		return emptyResp, err
-	}
-
-	if err := a.handleCPUSet(ociSpec); err != nil {
-		return emptyResp, err
-	}
-
-	if err := a.applyNetworkSysctls(ociSpec); err != nil {
-		return emptyResp, err
-	}
-
-	if a.sandbox.guestHooksPresent {
-		// Add any custom OCI hooks to the spec
-		a.sandbox.addGuestHooks(ociSpec)
-
-		// write the OCI spec to a file so that hooks can read it
-		//err = writeSpecToFile(ociSpec)
-		//if err != nil {
-		//	return emptyResp, err
-		//}
-
-		// Change cwd because libcontainer assumes the bundle path is the cwd:
-		// https://github.com/opencontainers/runc/blob/v1.0.0-rc5/libcontainer/specconv/spec_linux.go#L157
-		//oldcwd, err := changeToBundlePath(ociSpec)
-		//if err != nil {
-		//	return emptyResp, err
-		//}
-		//defer os.Chdir(oldcwd)
-	}
-
-	//// Convert the OCI specification into a libcontainer configuration.
-	//config, err := specconv.CreateLibcontainerConfig(&specconv.CreateOpts{
-	//	CgroupName:   req.ContainerId,
-	//	NoNewKeyring: true,
-	//	Spec:         ociSpec,
-	//	NoPivotRoot:  a.sandbox.noPivotRoot,
-	//})
-	//if err != nil {
-	//	return emptyResp, err
-	//}
-
-	//// apply rlimits
-	//config.Rlimits = posixRlimitsToRlimits(ociSpec.Process.Rlimits)
-	//
-	//// Update libcontainer configuration for specific cases not handled
-	//// by the specconv converter.
-	//if err = a.updateContainerConfig(ociSpec, config, ctr); err != nil {
-	//	return emptyResp, err
-	//}
-	//
-	//return a.finishCreateContainer(ctr, req, config)
-
 	return nil, nil
 }
 
@@ -751,56 +291,8 @@ func (a *agentGRPC) applyNetworkSysctls(ociSpec *specs.Spec) error {
 }
 
 func (a *agentGRPC) handleCPUSet(ociSpec *specs.Spec) error {
-	//if ociSpec.Linux.Resources.CPU != nil && ociSpec.Linux.Resources.CPU.Cpus != "" {
-	//	availableCpuset, err := getAvailableCpusetList(ociSpec.Linux.Resources.CPU.Cpus)
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	ociSpec.Linux.Resources.CPU.Cpus = availableCpuset
-	//}
 	return nil
 }
-
-//func posixRlimitsToRlimits(posixRlimits []specs.POSIXRlimit) []configs.Rlimit {
-//	var rlimits []configs.Rlimit
-//
-//	rlimitsMap := map[string]int{
-//		"RLIMIT_CPU":        unix.RLIMIT_CPU,        // 0x0
-//		"RLIMIT_FSIZE":      unix.RLIMIT_FSIZE,      // 0x1
-//		"RLIMIT_DATA":       unix.RLIMIT_DATA,       // 0x2
-//		"RLIMIT_STACK":      unix.RLIMIT_STACK,      // 0x3
-//		"RLIMIT_CORE":       unix.RLIMIT_CORE,       // 0x4
-//		"RLIMIT_RSS":        unix.RLIMIT_RSS,        // 0x5
-//		"RLIMIT_NPROC":      unix.RLIMIT_NPROC,      // 0x6
-//		"RLIMIT_NOFILE":     unix.RLIMIT_NOFILE,     // 0x7
-//		"RLIMIT_MEMLOCK":    unix.RLIMIT_MEMLOCK,    // 0x8
-//		"RLIMIT_AS":         unix.RLIMIT_AS,         // 0x9
-//		"RLIMIT_LOCKS":      unix.RLIMIT_LOCKS,      // 0xa
-//		"RLIMIT_SIGPENDING": unix.RLIMIT_SIGPENDING, // 0xb
-//		"RLIMIT_MSGQUEUE":   unix.RLIMIT_MSGQUEUE,   // 0xc
-//		"RLIMIT_NICE":       unix.RLIMIT_NICE,       // 0xd
-//		"RLIMIT_RTPRIO":     unix.RLIMIT_RTPRIO,     // 0xe
-//		"RLIMIT_RTTIME":     unix.RLIMIT_RTTIME,     // 0xf
-//	}
-//
-//	for _, l := range posixRlimits {
-//		limit, ok := rlimitsMap[l.Type]
-//		if !ok {
-//			AgentLog.WithField("rlimit", l.Type).Warnf("Unknown rlimit")
-//			continue
-//		}
-//
-//		rl := configs.Rlimit{
-//			Type: limit,
-//			Hard: l.Hard,
-//			Soft: l.Soft,
-//		}
-//		rlimits = append(rlimits, rl)
-//	}
-//
-//	return rlimits
-//}
 
 func (a *agentGRPC) createContainerChecks(req *pb.CreateContainerRequest) (err error) {
 	if !a.sandbox.running {
@@ -819,53 +311,14 @@ func (a *agentGRPC) createContainerChecks(req *pb.CreateContainerRequest) (err e
 }
 
 func (a *agentGRPC) pidNsExists(grpcSpec *pb.Spec) bool {
-	//if grpcSpec.Linux != nil {
-	//	for _, n := range grpcSpec.Linux.Namespaces {
-	//		if n.Type == string(configs.NEWPID) {
-	//			return true
-	//		}
-	//	}
-	//}
 	return false
 }
 
 func (a *agentGRPC) updateSharedPidNs(ctr *container) error {
-	// Populate the shared pid path only if this is an infra container and
-	// SandboxPidns has not been passed in the CreateSandbox request.
-	// This means a  separate pause process has not been created. We treat the
-	// first container created as the infra container in that case
-	// and use its pid namespace in case pid namespace needs to be shared.
-	//if !a.sandbox.sandboxPidNs && len(a.sandbox.containers) == 1 {
-	//	pid, err := ctr.initProcess.process.Pid()
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	a.sandbox.sharedPidNs.path = fmt.Sprintf("/proc/%d/ns/pid", pid)
-	//}
-
 	return nil
 }
 
 func (a *agentGRPC) StartContainer(ctx context.Context, req *pb.StartContainerRequest) (*gpb.Empty, error) {
-	//ctr, err := a.getContainer(req.ContainerId)
-	//if err != nil {
-	//	return emptyResp, err
-	//}
-
-	//status, err := ctr.container.Status()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//if status != libcontainer.Created {
-	//	return nil, grpcStatus.Errorf(codes.FailedPrecondition, "Container %s status %s, should be %s", req.ContainerId, status.String(), libcontainer.Created.String())
-	//}
-	//
-	//if err := ctr.container.Exec(); err != nil {
-	//	return emptyResp, err
-	//}
-
 	return emptyResp, nil
 }
 
@@ -897,60 +350,6 @@ func (a *agentGRPC) ExecProcess(ctx context.Context, req *pb.ExecProcessRequest)
 }
 
 func (a *agentGRPC) SignalProcess(ctx context.Context, req *pb.SignalProcessRequest) (*gpb.Empty, error) {
-	if !a.sandbox.running {
-		return emptyResp, grpcStatus.Error(codes.FailedPrecondition, "Sandbox not started, impossible to signal the container")
-	}
-
-	//ctr, err := a.sandbox.getContainer(req.ContainerId)
-	//if err != nil {
-	//	return emptyResp, grpcStatus.Errorf(codes.FailedPrecondition, "Could not signal process %s: %v", req.ExecId, err)
-	//}
-
-	//status, err := ctr.container.Status()
-	//if err != nil {
-	//	return emptyResp, err
-	//}
-	//
-	//signal := syscall.Signal(req.Signal)
-	//
-	//if status == libcontainer.Stopped {
-	//	AgentLog.WithFields(logrus.Fields{
-	//		"containerID": req.ContainerId,
-	//		"signal":      signal.String(),
-	//	}).Info("discarding signal as container stopped")
-	//	return emptyResp, nil
-	//}
-
-	//// If the exec ID provided is empty, let's apply the signal to all
-	//// processes inside the container.
-	//// If the process is the container process, let's use the container
-	//// API for that.
-	//// Frozen processes are thawed when `all` is true, allowing them to receive and process signals.
-	//if req.ExecId == "" || status == libcontainer.Paused {
-	//	return emptyResp, ctr.container.Signal(signal, true)
-	//} else if ctr.initProcess.id == req.ExecId {
-	//	pid, err := ctr.initProcess.process.Pid()
-	//	if err != nil {
-	//		return emptyResp, err
-	//	}
-	//	// For container initProcess, if it hasn't installed handler for "SIGTERM" signal,
-	//	// it will ignore the "SIGTERM" signal sent to it, thus send it "SIGKILL" signal
-	//	// instead of "SIGTERM" to terminate it.
-	//	if signal == syscall.SIGTERM && !isSignalHandled(pid, syscall.SIGTERM) {
-	//		signal = syscall.SIGKILL
-	//	}
-	//	return emptyResp, ctr.container.Signal(signal, false)
-	//}
-
-	//proc, err := ctr.getProcess(req.ExecId)
-	//if err != nil {
-	//	return emptyResp, grpcStatus.Errorf(grpcStatus.Convert(err).Code(), "Could not signal process: %v", err)
-	//}
-
-	//if err := proc.process.Signal(signal); err != nil {
-	//	return emptyResp, err
-	//}
-
 	return emptyResp, nil
 }
 
@@ -988,32 +387,6 @@ func isSignalHandled(pid int, signum syscall.Signal) bool {
 }
 
 func (a *agentGRPC) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest) (*pb.WaitProcessResponse, error) {
-	proc, ctr, err := a.sandbox.getProcess(req.ContainerId, req.ExecId)
-	if err != nil {
-		return &pb.WaitProcessResponse{}, err
-	}
-
-	defer proc.Do(func() {
-		proc.closePostExitFDs()
-		ctr.deleteProcess(proc.id)
-	})
-
-	// Using helper function wait() to deal with the subreaper.
-	//libContProcess := (*reaperLibcontainerProcess)(&(proc.process))
-	//exitCode, err := a.sandbox.subreaper.wait(proc.exitCodeCh, libContProcess)
-	//if err != nil {
-	//	return &pb.WaitProcessResponse{}, err
-	//}
-	//refill the exitCodeCh with the exitcode which can be read out
-	//by another WaitProcess(). Since this channel isn't be closed,
-	//here the refill will always success and it will be free by GC
-	//once the process exits.
-	//proc.exitCodeCh <- exitCode
-	//
-	//return &pb.WaitProcessResponse{
-	//	Status: int32(exitCode),
-	//}, nil
-
 	return &pb.WaitProcessResponse{}, nil
 }
 
@@ -1030,285 +403,34 @@ func getPIDIndex(title string) int {
 
 func (a *agentGRPC) ListProcesses(ctx context.Context, req *pb.ListProcessesRequest) (*pb.ListProcessesResponse, error) {
 	resp := &pb.ListProcessesResponse{}
-
-	//c, err := a.sandbox.getContainer(req.ContainerId)
-	//if err != nil {
-	//	return resp, err
-	//}
-
-	//// Get the list of processes that are running inside the containers.
-	//// the PIDs match with the system PIDs, not with container's namespace
-	//pids, err := c.container.Processes()
-	//if err != nil {
-	//	return resp, err
-	//}
-
-	switch req.Format {
-	case "table":
-	case "json":
-		//resp.ProcessList, err = json.Marshal(pids)
-		//return resp, err
-		return nil, nil
-	default:
-		return resp, fmt.Errorf("invalid format option")
-	}
-
-	psArgs := req.Args
-	if len(psArgs) == 0 {
-		psArgs = []string{"-ef"}
-	}
-
-	// All container's processes are visibles from agent's namespace.
-	// pids already contains the list of processes that are running
-	// inside a container, now we have to use that list to filter
-	// ps output and return just container's processes
-	//cmd := exec.Command("ps", psArgs...)
-	//output, err := a.sandbox.subreaper.combinedOutput(cmd)
-	//if err != nil {
-	//	return nil, fmt.Errorf("%s: %s", err, output)
-	//}
-
-	//lines := strings.Split(string(output), "\n")
-	//
-	//pidIndex := getPIDIndex(lines[0])
-	//
-	//// PID field not found
-	//if pidIndex == -1 {
-	//	return nil, fmt.Errorf("failed to find PID field in ps output")
-	//}
-
-	// append title
-	//var result bytes.Buffer
-	//
-	//result.WriteString(lines[0] + "\n")
-	//
-	//for _, line := range lines[1:] {
-	//	if len(line) == 0 {
-	//		continue
-	//	}
-	//	fields := strings.Fields(line)
-	//	if pidIndex >= len(fields) {
-	//		return nil, fmt.Errorf("missing PID field: %s", line)
-	//	}
-	//
-	//	//p, err := strconv.Atoi(fields[pidIndex])
-	//	//if err != nil {
-	//	//	return nil, fmt.Errorf("failed to convert pid to int: %s", fields[pidIndex])
-	//	//}
-	//
-	//	//// appends pid line
-	//	//for _, pid := range pids {
-	//	//	if pid == p {
-	//	//		result.WriteString(line + "\n")
-	//	//		break
-	//	//	}
-	//	//}
-	//}
-
-	//resp.ProcessList = result.Bytes()
 	return resp, nil
 }
 
 func (a *agentGRPC) UpdateContainer(ctx context.Context, req *pb.UpdateContainerRequest) (*gpb.Empty, error) {
-	if req.Resources == nil {
-		return emptyResp, fmt.Errorf("Resources in the request are nil")
-	}
-
-	//c, err := a.sandbox.getContainer(req.ContainerId)
-	//if err != nil {
-	//	return emptyResp, err
-	//}
-
-	//// c.container.Config returns a copy of non-pointer members
-	//// in configs.Config, configs.Config.Cgroup is a pointer hence
-	//// if it is modified, the container cgroup is modifed too and
-	//// c.container.Set won't be able to rollback in case of failure.
-	//contConfig := c.container.Config()
-	//var resources configs.Resources
-	//if contConfig.Cgroups != nil && contConfig.Cgroups.Resources != nil {
-	//	resources = *contConfig.Cgroups.Resources
-	//}
-	//
-	//// Update the value
-	//if req.Resources.BlockIO != nil {
-	//	resources.BlkioWeight = uint16(req.Resources.BlockIO.Weight)
-	//}
-	//
-	//if req.Resources.CPU != nil {
-	//	resources.CpuPeriod = req.Resources.CPU.Period
-	//	resources.CpuQuota = req.Resources.CPU.Quota
-	//	resources.CpuShares = req.Resources.CPU.Shares
-	//	resources.CpuRtPeriod = req.Resources.CPU.RealtimePeriod
-	//	resources.CpuRtRuntime = req.Resources.CPU.RealtimeRuntime
-	//	resources.CpusetCpus = req.Resources.CPU.Cpus
-	//	resources.CpusetMems = req.Resources.CPU.Mems
-	//}
-	//
-	//if req.Resources.Memory != nil {
-	//	resources.KernelMemory = req.Resources.Memory.Kernel
-	//	resources.KernelMemoryTCP = req.Resources.Memory.KernelTCP
-	//	resources.Memory = req.Resources.Memory.Limit
-	//	resources.MemoryReservation = req.Resources.Memory.Reservation
-	//	resources.MemorySwap = req.Resources.Memory.Swap
-	//}
-	//
-	//if req.Resources.Pids != nil {
-	//	resources.PidsLimit = req.Resources.Pids.Limit
-	//}
-	//
-	//// cpuset is a special case where container's cpuset cgroup MUST BE updated
-	//if resources.CpusetCpus != "" {
-	//	resources.CpusetCpus, err = getAvailableCpusetList(resources.CpusetCpus)
-	//	if err != nil {
-	//		return emptyResp, err
-	//	}
-	//
-	//	cookies := make(cookie)
-	//	if err = updateCpusetPath(contConfig.Cgroups.Path, resources.CpusetCpus, cookies); err != nil {
-	//		AgentLog.WithError(err).Warn("Could not update container cpuset cgroup")
-	//	}
-	//}
-	//
-	//// Create a copy of container's cgroup, if c.container.Set fails,
-	//// configuration won't be modified and it will be able to rollback
-	//// to the original container cgroup configuration.
-	//config := contConfig
-	//var cgroupsCopy configs.Cgroup
-	//if contConfig.Cgroups != nil {
-	//	cgroupsCopy = *contConfig.Cgroups
-	//}
-	//cgroupsCopy.Resources = &resources
-	//config.Cgroups = &cgroupsCopy
-	//return emptyResp, c.container.Set(config)
-
 	return nil, nil
 }
 
 func (a *agentGRPC) StatsContainer(ctx context.Context, req *pb.StatsContainerRequest) (*pb.StatsContainerResponse, error) {
-	//c, err := a.sandbox.getContainer(req.ContainerId)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	//stats, err := c.container.Stats()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//cgroupData, err := json.Marshal(stats.CgroupStats)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//netData, err := json.Marshal(stats.Interfaces)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	var cgroupStats pb.CgroupStats
-	networkStats := make([]*pb.NetworkStats, 0)
-
-	//err = json.Unmarshal(cgroupData, &cgroupStats)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//err = json.Unmarshal(netData, &networkStats)
-	//if err != nil {
-	//	return nil, err
-	//}
-	resp := &pb.StatsContainerResponse{
-		CgroupStats:  &cgroupStats,
-		NetworkStats: networkStats,
-	}
-
+	resp := &pb.StatsContainerResponse{}
 	return resp, nil
 
 }
 
 func (a *agentGRPC) PauseContainer(ctx context.Context, req *pb.PauseContainerRequest) (*gpb.Empty, error) {
-	//c, err := a.sandbox.getContainer(req.ContainerId)
-	//if err != nil {
-	//	return emptyResp, err
-	//}
-
 	a.sandbox.Lock()
 	defer a.sandbox.Unlock()
 
-	//return emptyResp, c.container.Pause()
 	return emptyResp, nil
 }
 
 func (a *agentGRPC) ResumeContainer(ctx context.Context, req *pb.ResumeContainerRequest) (*gpb.Empty, error) {
-	//c, err := a.sandbox.getContainer(req.ContainerId)
-	//if err != nil {
-	//	return emptyResp, err
-	//}
-
 	a.sandbox.Lock()
 	defer a.sandbox.Unlock()
 
-	//return emptyResp, c.container.Resume()
 	return emptyResp, nil
 }
 
 func (a *agentGRPC) RemoveContainer(ctx context.Context, req *pb.RemoveContainerRequest) (*gpb.Empty, error) {
-	ctr, err := a.sandbox.getContainer(req.ContainerId)
-	if err != nil {
-		return emptyResp, err
-	}
-
-	timeout := int(req.Timeout)
-
-	a.sandbox.Lock()
-	defer a.sandbox.Unlock()
-
-	if timeout == 0 {
-		if err := ctr.removeContainer(); err != nil {
-			return emptyResp, err
-		}
-
-		// Find the sandbox storage used by this container
-		for _, path := range ctr.mounts {
-			if _, ok := a.sandbox.storages[path]; ok {
-				if err := a.sandbox.unsetAndRemoveSandboxStorage(path); err != nil {
-					return emptyResp, err
-				}
-			}
-		}
-	} else {
-		done := make(chan error)
-		go func() {
-			if err := ctr.removeContainer(); err != nil {
-				done <- err
-				close(done)
-				return
-			}
-
-			//Find the sandbox storage used by this container
-			for _, path := range ctr.mounts {
-				if _, ok := a.sandbox.storages[path]; ok {
-					if err := a.sandbox.unsetAndRemoveSandboxStorage(path); err != nil {
-						done <- err
-						close(done)
-						return
-					}
-				}
-			}
-			close(done)
-		}()
-
-		select {
-		case err := <-done:
-			if err != nil {
-				return emptyResp, err
-			}
-		case <-time.After(time.Duration(req.Timeout) * time.Second):
-			return emptyResp, grpcStatus.Errorf(codes.DeadlineExceeded, "Timeout reached after %ds", timeout)
-		}
-	}
-
-	delete(a.sandbox.containers, ctr.id)
-
 	return emptyResp, nil
 }
 
@@ -1415,113 +537,10 @@ func (a *agentGRPC) TtyWinResize(ctx context.Context, req *pb.TtyWinResizeReques
 }
 
 func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequest) (*gpb.Empty, error) {
-	if a.sandbox.running {
-		return emptyResp, grpcStatus.Error(codes.AlreadyExists, "Sandbox already started, impossible to start again")
-	}
-
-	a.sandbox.hostname = req.Hostname
-	a.sandbox.containers = make(map[string]*container)
-	//a.sandbox.network.ifaces = make(map[string]*types.Interface)
-	//a.sandbox.network.dns = req.Dns
-	a.sandbox.running = true
-	a.sandbox.sandboxPidNs = req.SandboxPidns
-	a.sandbox.storages = make(map[string]*sandboxStorage)
-	//a.sandbox.guestHooks = &specs.Hooks{}
-	a.sandbox.guestHooksPresent = false
-
-	if req.GuestHookPath != "" {
-		a.sandbox.scanGuestHooks(req.GuestHookPath)
-	}
-
-	if req.SandboxId != "" {
-		a.sandbox.id = req.SandboxId
-		AgentLog = AgentLog.WithField("sandbox", a.sandbox.id)
-	}
-
-	// Set up shared UTS and IPC namespaces
-	if err := a.sandbox.setupSharedNamespaces(ctx); err != nil {
-		return emptyResp, err
-	}
-
-	if req.SandboxPidns {
-		if err := a.sandbox.setupSharedPidNs(); err != nil {
-			return emptyResp, err
-		}
-	}
-
-	//mountList, err := addStorages(ctx, req.Storages, a.sandbox)
-	//if err != nil {
-	//	return emptyResp, err
-	//}
-
-	//a.sandbox.mounts = mountList
-
-	//if err := setupDNS(a.sandbox.network.dns); err != nil {
-	//	return emptyResp, err
-	//}
-
 	return emptyResp, nil
 }
 
 func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRequest) (*gpb.Empty, error) {
-	if !a.sandbox.running {
-		AgentLog.Info("Sandbox not started, this is a no-op")
-		return emptyResp, nil
-	}
-
-	a.sandbox.Lock()
-
-	for key, c := range a.sandbox.containers {
-		if err := c.removeContainer(); err != nil {
-			return emptyResp, err
-		}
-
-		// Find the sandbox storage used by this container
-		for _, path := range c.mounts {
-			if _, ok := a.sandbox.storages[path]; ok {
-				if err := a.sandbox.unsetAndRemoveSandboxStorage(path); err != nil {
-					return emptyResp, err
-				}
-			}
-		}
-		delete(a.sandbox.containers, key)
-	}
-	a.sandbox.Unlock()
-
-	//if err := a.sandbox.removeNetwork(); err != nil {
-	//	return emptyResp, err
-	//}
-
-	//if err := removeMounts(a.sandbox.mounts); err != nil {
-	//	return emptyResp, err
-	//}
-
-	if err := a.sandbox.teardownSharedPidNs(); err != nil {
-		return emptyResp, err
-	}
-
-	if err := a.sandbox.unmountSharedNamespaces(); err != nil {
-		return emptyResp, err
-	}
-
-	if tracing && !startTracingCalled {
-		// Close stopServer channel to signal the main agent code to stop
-		// the server when all gRPC calls will be completed.
-		close(a.sandbox.stopServer)
-	}
-
-	a.sandbox.hostname = ""
-	a.sandbox.id = ""
-	a.sandbox.containers = make(map[string]*container)
-	a.sandbox.running = false
-	//a.sandbox.network = network{}
-	a.sandbox.mounts = []string{}
-	a.sandbox.storages = make(map[string]*sandboxStorage)
-
-	// Synchronize the caches on the system. This is needed to ensure
-	// there is no pending transactions left before the VM is shut down.
-	//syscall.Sync()
-
 	return emptyResp, nil
 }
 
@@ -1562,55 +581,16 @@ func (a *agentGRPC) ReseedRandomDev(ctx context.Context, req *pb.ReseedRandomDev
 func (a *agentGRPC) GetGuestDetails(ctx context.Context, req *pb.GuestDetailsRequest) (*pb.GuestDetailsResponse, error) {
 	logrus.Infof("receive [GetGuestDetails] GuestDetailsRequest: %v", *req)
 	var details pb.GuestDetailsResponse
-	if req.MemBlockSize {
-		data, err := ioutil.ReadFile(sysfsMemoryBlockSizePath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				AgentLog.WithField("sysfsMemoryBlockSizePath", sysfsMemoryBlockSizePath).Info("Guest kernel config doesn't support memory hotplug")
-			} else {
-				return nil, err
-			}
-		} else {
-			if len(data) == 0 {
-				return nil, fmt.Errorf("%v is empty", sysfsMemoryBlockSizePath)
-			}
-			details.MemBlockSizeBytes, err = strconv.ParseUint(string(data[:len(data)-1]), 16, 64)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	if req.MemHotplugProbe {
-		if _, err := os.Stat(sysfsMemoryHotplugProbePath); os.IsNotExist(err) {
-			details.SupportMemHotplugProbe = false
-		} else if err != nil {
-			return nil, err
-		} else {
-			details.SupportMemHotplugProbe = true
-		}
-	}
-
 	details.AgentDetails = a.getAgentDetails(ctx)
 
 	return &details, nil
 }
 
 func (a *agentGRPC) MemHotplugByProbe(ctx context.Context, req *pb.MemHotplugByProbeRequest) (*gpb.Empty, error) {
-	for _, addr := range req.MemHotplugProbeAddr {
-		if err := ioutil.WriteFile(sysfsMemoryHotplugProbePath, []byte(fmt.Sprintf("0x%x", addr)), 0600); err != nil {
-			return emptyResp, err
-		}
-	}
-
 	return emptyResp, nil
 }
 
 func (a *agentGRPC) haveSeccomp() bool {
-	//if seccompSupport == "yes" && seccomp.IsEnabled() {
-	//	return true
-	//}
-
 	return false
 }
 
@@ -1654,9 +634,9 @@ func (a *agentGRPC) CopyFile(ctx context.Context, req *pb.CopyFileRequest) (*gpb
 
 	// container's rootfs is mounted at /run, in order to avoid overwrite guest's rootfs files, only
 	// is possible to copy files to /run
-	if !strings.HasPrefix(path, containersRootfsPath) {
-		return emptyResp, fmt.Errorf("Only is possible to copy files into the %s directory", containersRootfsPath)
-	}
+	//if !strings.HasPrefix(path, containersRootfsPath) {
+	//	return emptyResp, fmt.Errorf("Only is possible to copy files into the %s directory", containersRootfsPath)
+	//}
 
 	if err := os.MkdirAll(filepath.Dir(path), os.FileMode(req.DirMode)); err != nil {
 		return emptyResp, err
