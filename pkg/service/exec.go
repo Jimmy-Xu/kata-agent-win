@@ -11,6 +11,7 @@ func runCmd(cmd string, args ...string) (string, error) {
 	logrus.Debugf("runCmd: %v", cmdLine.Args)
 	buf, err := cmdLine.CombinedOutput()
 	out := convertByte2String(buf, GBK)
+	logrus.Infof("output:%s", out)
 	if err != nil {
 		if len(out) != 0 {
 			return "", fmt.Errorf("%s failed: %v: %s", args[0], err, out)

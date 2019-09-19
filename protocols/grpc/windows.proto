@@ -58,6 +58,7 @@ message SetHostnameRequest {
 }
 message SetHostnameResponse {
     string error = 1;
+    bool restart = 2;
 }
 
 //SetNetworkConfigRequest

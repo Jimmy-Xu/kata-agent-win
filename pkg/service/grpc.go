@@ -1769,6 +1769,7 @@ func (a *agentGRPC) GetUsers(ctx context.Context, req *pb.GetUsersRequest) (*pb.
 	logrus.Debugf("output:%s, err:%v", output, err)
 	if err != nil {
 		resp.Error = fmt.Sprintf("failed to get users, error:%v", err)
+		return &resp, nil
 	} else {
 		for _, item := range strings.Split(string(output), "\r\r\n") {
 			if item == "Node,Name" || item == "" {
@@ -1782,7 +1783,6 @@ func (a *agentGRPC) GetUsers(ctx context.Context, req *pb.GetUsersRequest) (*pb.
 			}
 		}
 	}
-	logrus.Infof("resp:%v", resp)
 	return &resp, nil
 }
 
@@ -1807,6 +1807,7 @@ func (a *agentGRPC) GetNetworkConfig(ctx context.Context, req *pb.GetNetworkConf
 	output, err := runCmd("wmic", "NICCONFIG", "WHERE", fmt.Sprintf("MACAddress='%s'", mac), "GET", strings.Join(fieldAry, ","), "/format:csv")
 	if err != nil {
 		resp.Error = fmt.Sprintf("failed to get network config, error:%v", convertByte2String([]byte(err.Error()), GB18030))
+		return &resp, nil
 	} else {
 		ary := strings.Split(string(output), "\r\r\n")
 		if len(ary) >= 4 {
@@ -1818,6 +1819,7 @@ func (a *agentGRPC) GetNetworkConfig(ctx context.Context, req *pb.GetNetworkConf
 			values := strings.Split(ary[2], ",")
 			if len(titles) != len(values) {
 				resp.Error = fmt.Sprintf("failed to parse network config: %s", output)
+				return &resp, nil
 			} else {
 				var (
 					ipAry     []string
@@ -1853,9 +1855,9 @@ func (a *agentGRPC) GetKMS(ctx context.Context, req *pb.GetKMSRequest) (*pb.GetK
 	resp := pb.GetKMSResponse{}
 
 	output, err := runCmd(`C:\Windows\System32\reg.exe`, "query", `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform`, "/v", "KeyManagementServiceName")
-	logrus.Debugf("output:%s, err:%v", output, err)
 	if err != nil {
 		resp.Error = fmt.Sprintf("failed to get kms server, error:%v", convertByte2String([]byte(err.Error()), GB18030))
+		return &resp, nil
 	} else {
 		for _, item := range strings.Split(string(output), "\r\n") {
 			if strings.Contains(item, "REG_SZ") {
@@ -1874,11 +1876,10 @@ func (a *agentGRPC) SetUserPassword(ctx context.Context, req *pb.SetUserPassword
 	logrus.Infof("receive [SetUserPassword] SetUserPasswordRequest: %v", *req)
 	resp := pb.SetUserPasswordResponse{}
 
-	output, err := runCmd("net", "user", req.Username, req.Password)
+	_, err := runCmd("net", "user", req.Username, req.Password)
 	if err != nil {
 		resp.Error = fmt.Sprintf("failed to set password of user %v, error:%v", req.Username, err)
 	}
-	logrus.Infof("output:%s", output)
 	return &resp, nil
 }
 
@@ -1888,27 +1889,85 @@ func (a *agentGRPC) SetHostname(ctx context.Context, req *pb.SetHostnameRequest)
 
 	hostname, _ := windows.ComputerName()
 	//use single quotes
-	output, err := runCmd("wmic", "computersystem", "where", fmt.Sprintf(`caption='%s'`, hostname), "rename", fmt.Sprintf(`'%s'`, req.Hostname))
+	_, err := runCmd("wmic", "computersystem", "where", fmt.Sprintf(`caption='%s'`, hostname), "rename", fmt.Sprintf(`'%s'`, req.Hostname))
 	if err != nil {
 		resp.Error = fmt.Sprintf("failed to set hostname to %v, error:%v", req.Hostname, err)
+		return &resp, nil
 	}
-	logrus.Infof("output:%s", output)
+
+	//check NV Name
+	output, err := runCmd(`C:\Windows\System32\reg.exe`, "query", `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\Tcpip\Parameters`, "/v", "NV Hostname")
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to get NV Hostname, error:%v", convertByte2String([]byte(err.Error()), GB18030))
+		return &resp, nil
+	} else {
+		for _, item := range strings.Split(string(output), "\r\n") {
+			if strings.Contains(item, "REG_SZ") {
+				ary := strings.Split(item, "REG_SZ")
+				if len(ary) >= 2 {
+					if strings.TrimSpace(ary[1]) != hostname {
+						resp.Restart = true
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if resp.Restart {
+		_, err := runCmd("shutdown.exe", "-r", "-t", "0")
+		if err != nil {
+			resp.Error = fmt.Sprintf("failed to restart to make the hostname take effect, error:%v", err)
+			return &resp, nil
+		}
+	} else {
+		logrus.Infof("hostname isn't changed, skip restart windows")
+	}
+
 	return &resp, nil
 }
 
 func (a *agentGRPC) SetNetworkConfig(ctx context.Context, req *pb.SetNetworkConfigRequest) (*pb.SetNetworkConfigResponse, error) {
-	return nil, nil
+	logrus.Infof("receive [SetNetworkConfig] SetNetworkConfigRequest: %v", *req)
+	resp := pb.SetNetworkConfigResponse{}
+	mac := strings.ToUpper(strings.Join(strings.Split(req.MacAddress, "-"), ":"))
+
+	//set dns
+	_, err := runCmd("wmic", "nicconfig", "where", fmt.Sprintf("macaddress='%s'", mac), "call", fmt.Sprintf("SetDNSServerSearchOrder('%s')", strings.Join(req.DnsServer, "','")))
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to set dns to %v, error:%v", req.DnsServer, err)
+		return &resp, nil
+	}
+
+	//set default gateway
+	_, err = runCmd("wmic", "nicconfig", "where", fmt.Sprintf("macaddress='%s'", mac), "call", fmt.Sprintf("SetGateways('%s'),(1)", req.Gateway))
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to set gateway to %v, error:%v", req.DnsServer, err)
+		return &resp, nil
+	}
+
+	//set static ip
+	addr := &pb.Addrs{}
+	if len(req.Addrs) > 0 {
+		addr = req.Addrs[0]
+	}
+	_, err = runCmd("wmic", "nicconfig", "where", fmt.Sprintf("macaddress='%s'", mac), "call", fmt.Sprintf("EnableStatic('%s'),('%s')", addr.IpAddress, addr.Subnet))
+	if err != nil {
+		resp.Error = fmt.Sprintf("failed to set static ip to %v, error:%v", req.Addrs, err)
+		return &resp, nil
+	}
+
+	return &resp, nil
 }
 
 func (a *agentGRPC) SetKMS(ctx context.Context, req *pb.SetKMSRequest) (*pb.SetKMSResponse, error) {
 	logrus.Infof("receive [SetKMS] SetKMSRequest: %v", *req)
 	resp := pb.SetKMSResponse{}
 
-	output, err := runCmd("cscript", "/Nologo", `C:\Windows\System32\slmgr.vbs`, "/skms", req.Server)
+	_, err := runCmd("cscript", "/Nologo", `C:\Windows\System32\slmgr.vbs`, "/skms", req.Server)
 	if err != nil {
 		resp.Error = fmt.Sprintf("failed to set kms server to %v, error:%v", req.Server, err)
 	}
-	logrus.Infof("output:%s", output)
 	return &resp, nil
 
 }
