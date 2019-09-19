@@ -86,9 +86,14 @@ type sendReady struct {
 
 // newSession is used to construct a new session
 func newSession(config *Config, conn io.ReadWriteCloser, client bool) *Session {
+	logger := config.Logger
+	if logger == nil {
+		logger = log.New(config.LogOutput, "", log.LstdFlags)
+	}
+
 	s := &Session{
 		config:     config,
-		logger:     log.New(config.LogOutput, "", log.LstdFlags),
+		logger:     logger,
 		conn:       conn,
 		bufRead:    bufio.NewReader(conn),
 		pings:      make(map[uint32]chan struct{}),
@@ -451,12 +456,6 @@ func (s *Session) recvLoop() error {
 	for {
 		// Read the header
 		if _, err := io.ReadFull(s.bufRead, hdr); err != nil {
-			//patch for serial in windows
-			if strings.Contains(err.Error(), "Insufficient system resources exist to complete the requested service") {
-				//s.logger.Printf("wait...")
-				time.Sleep(3 * time.Second)
-				continue
-			}
 			if err != io.EOF && !strings.Contains(err.Error(), "closed") && !strings.Contains(err.Error(), "reset by peer") {
 				s.logger.Printf("[ERR] yamux: Failed to read header: %v", err)
 			}

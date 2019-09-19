@@ -28,6 +28,7 @@ import (
 	throttler "github.com/uber/jaeger-client-go/internal/throttler/remote"
 	"github.com/uber/jaeger-client-go/rpcmetrics"
 	"github.com/uber/jaeger-client-go/transport"
+	"github.com/uber/jaeger-lib/metrics"
 )
 
 const defaultSamplingProbability = 0.001
@@ -180,19 +181,20 @@ func (c Configuration) New(
 // NewTracer returns a new tracer based on the current configuration, using the given options,
 // and a closer func that can be used to flush buffers before shutdown.
 func (c Configuration) NewTracer(options ...Option) (opentracing.Tracer, io.Closer, error) {
+	if c.Disabled {
+		return &opentracing.NoopTracer{}, &nullCloser{}, nil
+	}
+
 	if c.ServiceName == "" {
 		return nil, nil, errors.New("no service name provided")
 	}
 
-	if c.Disabled {
-		return &opentracing.NoopTracer{}, &nullCloser{}, nil
-	}
 	opts := applyOptions(options...)
 	tracerMetrics := jaeger.NewMetrics(opts.metrics, nil)
 	if c.RPCMetrics {
 		Observer(
 			rpcmetrics.NewObserver(
-				opts.metrics.Namespace("jaeger-rpc", map[string]string{"component": "jaeger"}),
+				opts.metrics.Namespace(metrics.NSOptions{Name: "jaeger-rpc", Tags: map[string]string{"component": "jaeger"}}),
 				rpcmetrics.DefaultNameNormalizer,
 			),
 		)(&opts) // adds to c.observers
@@ -230,8 +232,10 @@ func (c Configuration) NewTracer(options ...Option) (opentracing.Tracer, io.Clos
 		jaeger.TracerOptions.Logger(opts.logger),
 		jaeger.TracerOptions.CustomHeaderKeys(c.Headers),
 		jaeger.TracerOptions.Gen128Bit(opts.gen128Bit),
+		jaeger.TracerOptions.PoolSpans(opts.poolSpans),
 		jaeger.TracerOptions.ZipkinSharedRPCSpan(opts.zipkinSharedRPCSpan),
 		jaeger.TracerOptions.MaxTagValueLength(opts.maxTagValueLength),
+		jaeger.TracerOptions.NoDebugFlagOnForcedSampling(opts.noDebugFlagOnForcedSampling),
 	}
 
 	for _, tag := range opts.tags {
