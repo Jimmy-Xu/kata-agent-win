@@ -712,10 +712,17 @@ func makeUnaryInterceptor() grpc.UnaryServerInterceptor {
 		} else {
 			// Just log call details
 			message = req.(proto.Message)
-
-			AgentLog.WithFields(logrus.Fields{
-				"request": grpcCall,
-				"req":     message.String()}).Debug("new request")
+			if grpcCall == "/grpc.WindowsService/SetUserPassword" {
+				r := req.(*pb.SetUserPasswordRequest)
+				r.Password = maskPassword(r.Password)
+				AgentLog.WithFields(logrus.Fields{
+					"request": grpcCall,
+					"req":     r.String()}).Debug("new request")
+			} else {
+				AgentLog.WithFields(logrus.Fields{
+					"request": grpcCall,
+					"req":     message.String()}).Debug("new request")
+			}
 			start = time.Now()
 		}
 
@@ -728,12 +735,22 @@ func makeUnaryInterceptor() grpc.UnaryServerInterceptor {
 			// Just log call details
 			elapsed = time.Since(start)
 			message = resp.(proto.Message)
+			if grpcCall == "/grpc.WindowsService/SetUserPassword" {
+				r := req.(*pb.SetUserPasswordRequest)
+				r.Password = maskPassword(r.Password)
+				logger := AgentLog.WithFields(logrus.Fields{
+					"request":  info.FullMethod,
+					"duration": elapsed.String(),
+					"resp":     r.String()})
+				logger.Debug("request end")
+			} else {
+				logger := AgentLog.WithFields(logrus.Fields{
+					"request":  info.FullMethod,
+					"duration": elapsed.String(),
+					"resp":     message.String()})
+				logger.Debug("request end")
+			}
 
-			logger := AgentLog.WithFields(logrus.Fields{
-				"request":  info.FullMethod,
-				"duration": elapsed.String(),
-				"resp":     message.String()})
-			logger.Debug("request end")
 		}
 
 		// Handle the following scenarios:

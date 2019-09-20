@@ -3,6 +3,8 @@ package service
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -39,12 +41,15 @@ func convertByte2String(byte []byte, charset Charset) string {
 	return str
 }
 
-func runCmd(cmd string, args ...string) (string, error) {
+func runCmd(action string, cmd string, args ...string) (string, error) {
 	cmdLine := exec.Command(cmd, args...)
-	logrus.Debugf("runCmd: %v", cmdLine.Args)
 	buf, err := cmdLine.CombinedOutput()
 	out := convertByte2String(buf, GBK)
-	logrus.Infof("output:%s", out)
+	logrus.Debugf("action: %v", action)
+	if strings.Contains(action, "SetUserPassword") {
+		cmdLine.Args[3] = maskPassword(args[2])
+	}
+	logrus.Debugf("runCmd: %v, output: %v", cmdLine.Args, out)
 	if err != nil {
 		if len(out) != 0 {
 			return "", fmt.Errorf("%s failed: %v: %s", args[0], err, out)
@@ -56,4 +61,14 @@ func runCmd(cmd string, args ...string) (string, error) {
 		return "", fmt.Errorf("%s failed: %v", args[0], err)
 	}
 	return out, nil
+}
+
+func maskPassword(password string) string {
+	l := len(password)
+	return fmt.Sprintf("%s%s%s", password[0:1], strings.Repeat("*", l-2), password[l-1:l])
+}
+
+func getFnName() string {
+	pc, _, _, _ := runtime.Caller(1)
+	return runtime.FuncForPC(pc).Name()
 }
