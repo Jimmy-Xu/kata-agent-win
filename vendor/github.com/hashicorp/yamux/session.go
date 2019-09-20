@@ -456,6 +456,12 @@ func (s *Session) recvLoop() error {
 	for {
 		// Read the header
 		if _, err := io.ReadFull(s.bufRead, hdr); err != nil {
+			//patch for serial in windows
+			if strings.Contains(err.Error(), "Insufficient system resources exist to complete the requested service") {
+				//s.logger.Printf("wait...")
+				time.Sleep(3 * time.Second)
+				continue
+			}
 			if err != io.EOF && !strings.Contains(err.Error(), "closed") && !strings.Contains(err.Error(), "reset by peer") {
 				s.logger.Printf("[ERR] yamux: Failed to read header: %v", err)
 			}
